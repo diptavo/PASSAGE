@@ -1,168 +1,218 @@
 # PASSAGE
 
-**P**athway **A**ssessment of **S**patial **S**ignatures via **A**ggregated **G**P **E**stimation
+**P**athway **A**ssessment of **S**patial **S**ignatures via **A**ggregated
+**G**aussian-process **E**stimation
 
-PASSAGE is a statistical framework for identifying spatially variable pathways (gene sets) in spatial transcriptomic and proteomic data. It fits a multivariate spatial factor model (Vecchia-approximated LMC), then runs joint variance-components score tests on pre-specified gene sets, producing pathway-level p-values, effect sizes, and a variance-share decomposition.
+PASSAGE is an R framework for pathway-level inference in spatial
+transcriptomics. It asks whether a predefined gene set has more residual
+spatial signal than expected for matched genes, quantifies the strength and
+coherence of that signal, and identifies genes that consistently drive it.
 
-## Status
+## Statistical Scope
 
-**Version 0.1.0 — MVP / development**. All math derived in writing, all functions structurally implemented, but NOT yet validated. See `tests/` for validation scripts that need to be run first.
+PASSAGE separates screening from primary inference.
 
-## What it does
-
-Given spatial expression data $\mathbf{Y}\in\mathbb{R}^{N\times G}$ and a collection of gene sets (e.g. GO BP, max 500 genes each), PASSAGE answers four nested questions per pathway:
-
-| Hypothesis | Question | Adjusts for |
+| Layer | Question | Recommended role |
 |---|---|---|
-| **H1** | Does the pathway have any spatial signal? | nothing |
-| **H2** | Does it have spatial signal beyond cell-type composition? | cell-type proportions |
-| **H3** | Does it have characteristic spatial pattern beyond the genome-wide background? | cell type + background factor scores |
-| **H4** | Does its spatial signature differ across pre-specified regions? | cell type + region indicator |
+| H1 | Does the pathway contain spatial signal? | Self-contained screen |
+| H2 | Does signal remain after measured cell-type adjustment? | Adjusted screen |
+| H3 competitive | Is residual pathway signal stronger than in matched random gene sets? | Primary pathway inference |
 
-The headline output is the **variance-share decomposition**:
+The competitive H3 null is evaluated by Monte Carlo gene-set resampling after
+adjustment for cell-type proportions, technical covariates, and optional
+background spatial factors. Matching can account for pathway size, expression,
+variance, detection rate, and coexpression module.
 
-```
-cell-type-explained        =  (Q_H1 - Q_H2) / Q_H1
-background-spatial-explained =  (Q_H2 - Q_H3) / Q_H2
-pathway-specific spatial   =  Q_H3 / Q_H1
-```
+The current primary statistic is `score_z`, the standardized spatial
+variance-component score. `score_robust_z` is a sensitivity analysis. Raw
+`score_Q`, cEPSV, pERSA-derived scores, CSPS, GSPS, HCPS, and other experimental
+statistics are retained for benchmarking or descriptive interpretation; they
+should not replace `score_z` for confirmatory inference without dataset-specific
+null calibration.
 
-Plus three pathway-level effect-size estimators that are equitable across pathways of different sizes:
-- `R2_cca` — canonical correlation between observed and fitted spatial signal
-- `R2_loo` — leave-one-location-out predictive $R^2$
-- `PSVS_range` — spatial-range-weighted proportion of spatial variability
+## Features
 
-## File layout
-
-```
-passage/
-├── engine_pca.R                 # Layer 1: PCA two-stage engine (E1)
-├── engine_cavi.R                # Layer 1: sparse kernel-ordered CAVI engine (E3)
-├── passage_score_h1.R           # Layer 2: H1 (any spatial signal)
-├── passage_score_h2.R           # Layer 2: H2 (beyond cell type)
-├── passage_score_h3.R           # Layer 2: H3 (beyond background)
-├── passage_score_h4.R           # Layer 2: H4 (regional differential)
-├── passage_pve.R                # Layer 3: PVE estimators
-├── passage_omnibus.R            # Layer 4: cross-H decomposition & reporting
-├── passage_summary_stats.R      # Layer 5: summary-statistics fallback
-├── run_passage.R                # Top-level driver
-├── load_passage.R               # Loader (sources everything in order)
-└── tests/
-    ├── test_engine_pca.R
-    └── test_passage_score_h1.R
-```
+- sparse Vecchia spatial precision construction;
+- PCA, spatial-basis, smoothed-PCA, NMF, alternating-GP, and optional TMB
+  factor engines;
+- self-contained H1/H2 score tests with residual-permutation calibration;
+- competitive H3 tests with matched Monte Carlo null gene sets;
+- empirical and pathway-size-stratified calibration utilities;
+- optional generalized-Pareto tail extrapolation in the large-scale workflow;
+- pathway spatial-variance, effective-size, covariance, coherence, hotspot,
+  and transferability metrics;
+- adaptive top-k driver genes, bootstrap selection frequencies, null driver
+  controls, and leave-one-gene-out validation;
+- reproducibility workflows for breast cancer, kidney cancer, and DLPFC data.
 
 ## Installation
 
+Install the development version from GitHub:
+
 ```r
-install.packages(c("Matrix", "GpGp", "ucminf", "CompQuadForm"))
-# Optional, recommended for large N:
-install.packages("sparseinv")  # faster Takahashi selected inversion
+install.packages("remotes")
+remotes::install_github("diptavo/PASSAGE")
 ```
 
-Then in your R session:
+Optional engines and calibration paths use packages listed in `Suggests`.
+The core implementation requires R 4.1 or newer and `Matrix`.
+
+## Inputs
+
+A standard analysis needs:
+
+1. `Y`: locations by genes normalized expression matrix;
+2. `coords`: locations by spatial-coordinate matrix;
+3. `pathways`: named list of gene symbols;
+4. `Z_CT`: aligned cell-type proportions, when available;
+5. additional technical or biological covariates;
+6. a background gene universe and matching variables for competitive tests.
+
+Rows must be aligned across expression, coordinates, and covariates. Gene names
+must be unique and stored in `colnames(Y)`.
+
+## Quick Start
+
+The bundled simulation runs without external data:
 
 ```r
-source("load_passage.R")
+library(PASSAGE)
+source(system.file("examples", "run_passage_simulation.R", package = "PASSAGE"))
 ```
 
-## Usage
-
-### Full joint pipeline
+For a self-contained H1/H2 screen:
 
 ```r
-results <- run_passage(
-  Y = log_counts,             # N x G expression matrix
-  locs = coords,              # N x 2 spatial coordinates
-  pathways = gobp_pathways,   # named list of gene-name vectors
-  gene_names = rownames(...),
-  Z_CT = cell_type_props,     # N x C cell-type proportions, enables H2
-  K = 6,
-  hypotheses = c("H1", "H2", "H3"),
-  adjust_method = "BH"
+screen <- passage_run(
+  Y = Y,
+  coords = coords,
+  pathways = pathways,
+  Z_CT = cell_type_proportions,
+  X = technical_covariates,
+  hypotheses = c("H1", "H2"),
+  calibration = "permutation",
+  n_perm = 999,
+  seed = 1
 )
 
-head(results$summary_table)
-# pathway | size | p_H1 | p_H2 | p_H3 | cell_type_share | background_share |
-# pathway_specific_share | R2_cca | PSVS_range | ...
+head(screen$summary)
 ```
 
-### Summary-statistics fallback (no joint engine fit)
+These p-values answer self-contained questions and can saturate in strongly
+structured tissue. Use competitive H3 for primary pathway discovery.
 
-For atlases where you only have per-gene nnSVG outputs:
+## Competitive H3
+
+Construct the H3 design from cell-type proportions, technical covariates, and
+any prespecified background spatial factors. Then compare each pathway with
+matched random gene sets:
 
 ```r
-gene_stats <- nnSVG_to_gene_stats(nnSVG_results)
-results <- run_passage_summary(gene_stats, pathways = gobp_pathways)
+X_h3 <- cbind(technical_covariates, cell_type_proportions,
+              background_spatial_factors)
+
+engine <- passage_fit_engine_pca(
+  Y = Y,
+  coords = coords,
+  X = X_h3,
+  K = 6,
+  m = 20
+)
+
+precomp <- passage_h_precompute(engine, X = X_h3)
+gene_bins <- passage_make_gene_bins(Y, gene_names = colnames(Y))
+
+h3 <- passage_conditional_competitive_test(
+  engine = engine,
+  Y = Y,
+  pathway = pathways[["HALLMARK_HYPOXIA"]],
+  gene_bins = gene_bins,
+  precomp = precomp,
+  statistic = "score_z",
+  sampler = "module",
+  B = 9999,
+  seed = 1
+)
+
+h3$permutation$p
+h3$permutation$enrichment
 ```
 
-### Single-pathway inspection
+Across pathways, apply FDR to the Monte Carlo p-values. The attainable exact
+p-value is `1 / (B + 1)`. Generalized-Pareto extrapolation is intended only for
+well-populated, diagnostically acceptable null tails; the empirical p-value
+must always be retained.
+
+## Drivers And Interpretation
+
+PASSAGE separates pathway significance from driver selection. After a pathway
+passes the competitive test, adaptive top-k selection ranks genes using their
+spatial score and pathway contribution:
 
 ```r
-engine <- fit_engine_pca(Y, locs, K = 6)
-precomp_h1 <- passage_h1_precompute(engine)
-res <- passage_test_pathway(engine, Y, my_pathway,
-                            Z_CT = cell_type_props,
-                            precomp_h1 = precomp_h1,
-                            hypotheses = c("H1", "H2", "H3"))
-print(res)
-# - Per-hypothesis p-values
-# - Variance-share decomposition
-# - Effect sizes
-# - SpASSET-selected spatially-active sub-pathway
+gene_scores <- passage_gene_score_z(engine, Y, precomp = precomp)
+
+drivers <- passage_sparse_topk_pathway_score_stat(
+  engine = engine,
+  Y = Y,
+  pathway = pathways[["HALLMARK_HYPOXIA"]],
+  precomp = precomp,
+  gene_scores = gene_scores,
+  output = "details"
+)
+
+drivers$selected_genes
+drivers$score_by_k
 ```
 
-## Engine choices
+Single-fit ranks are exploratory. The production driver workflow bootstraps
+spots, reports gene selection frequency and rank stability, compares against
+matched null pathways, and validates drivers by leave-one-gene-out score loss.
 
-| Engine | When to use |
+Useful pathway summaries include:
+
+| Metric | Plain interpretation |
 |---|---|
-| `fit_engine_pca`  | Fast, deterministic, MVP default. PCA two-stage with per-factor Vecchia GP. |
-| `fit_engine_cavi` | Principled. Sparse-loading kernel-ordered LMC with spike-and-slab on A. Slower but yields interpretable sparse loadings. |
+| competitive enrichment | Observed pathway score relative to matched null sets |
+| `mean_propSV_conditional` | Mean residual spatial fraction across pathway genes |
+| ePSV | Scale-weighted residual pathway spatial fraction |
+| PC1 spatial fraction | Fraction of pathway spatial covariance concentrated in one coordinated axis |
+| mean absolute spatial correlation | Average coherence among fitted spatial gene components |
+| effective pathway size | Number of effectively independent genes after correlation |
+| transferability | Reproducibility of pathway spatial activity across slices or samples |
 
-Both engines emit the same standardized output triple `(A_hat, theta_hat, D_hat)` plus the Vecchia precision matrices, so the downstream Layer 2/3/4 machinery is engine-agnostic.
+cEPSV and related quantities remain useful descriptive metrics even when they
+are not calibrated as primary test statistics.
 
-## Test variants within each H
+## Calibration Status
 
-Each hypothesis test runs an internal omnibus over:
+Null simulations and residual-null experiments have been run across breast
+cancer, kidney cancer, and DLPFC settings, including pathway-size strata. The
+current evidence supports matched Monte Carlo `score_z` as the default
+competitive test, with `score_robust_z` as a sensitivity statistic and
+empirical null recalibration when a study supplies enough exchangeable null
+replicates. See [docs/calibration.md](docs/calibration.md) for the decision
+rules and current limitations.
 
-- **Joint SKAT-style** at multiple weight schemes (`equal`, `var`, `range`)
-- **Burden** (single direction $\mathbf{1}_p/\sqrt{p}$)
-- **SpASSET subset search** — returns the spatially-active sub-pathway in addition to a p-value
+PASSAGE is research software. Calibration must be checked for each new assay,
+normalization, spatial platform, and matching design before confirmatory use.
 
-ACAT-Cauchy combination yields one omnibus p-value per H.
+## Repository Layout
 
-## Critical limitations and TODOs
+```text
+R/                         package implementation
+inst/tmb/                  optional TMB model
+tests/                     simulation and smoke tests
+inst/examples/             small runnable simulations
+analysis/                  calibration and method-development programs
+workflows/biowulf/         dataset and cluster workflows
+docs/                      statistical and implementation notes
+```
 
-1. **Not yet validated.** Null calibration simulations need to be run before any p-values are trusted. The `tests/test_passage_score_h1.R` script is the starting point.
-
-2. **CAVI engine v_k update** uses a dense matrix inverse instead of true Takahashi selected inversion. Works at Visium scale (N up to ~10k); above that, install `sparseinv` and switch to it.
-
-3. **PVE estimator (c) LOO** currently uses a naive 80/20 train-test split rather than per-location Vecchia conditional predictive. Replace in v2.
-
-4. **H4 calibration** is permutation-based (1000 perms default). For per-pathway speed, an analytical mixed-chi² calibration is on the roadmap.
-
-5. **H3 background fit** is per-pathway-size, cached by size bin. For thousands of pathways this is the main cost; consider precomputing background fits at common sizes.
-
-6. **H2 cell-type adjustment** inherits deconvolution error. Recommended practice: run twice with CARD and cell2location, compare.
-
-## Roadmap
-
-- v0.2: Real Vecchia-LOO predictive R² (replaces 80/20 split).
-- v0.2: Takahashi selected inversion in CAVI engine via `sparseinv`.
-- v0.3: Analytical H4 calibration; SpatialPCA / NSF / MEFISTO engine wrappers.
-- v0.4: Multi-sample extension (slice random effects).
-- v0.5: Benchmarking driver vs MEFISTO + projection, nnSVG + ORA, SpatialCorr, dCov-pathway.
-- v1.0: Real-data validation paper (DLPFC Visium, Slide-seqV2 cerebellum, breast Visium, METABRIC IMC).
-
-## Mathematical references
-
-- Vecchia, A.V. (1988). Estimation and Model Identification for Continuous Spatial Processes.
-- Wu, M.C. et al. (2011). Rare-Variant Association Testing for Sequencing Data with the Sequence Kernel Association Test (SKAT).
-- Liu, Y., Chen, S., Li, Z., Morrison, A.C., Boerwinkle, E., Lin, X. (2019). ACAT: A Fast and Powerful p-Value Combination Method for Rare-Variant Analysis in Sequencing Studies.
-- Bourotte, M., Heaton, M.J., Banerjee, S. (2024). Computational Considerations for the Linear Model of Coregionalization.
-- Bhattacharjee, S. et al. (2012). ASSET: A Subset-Based Approach for Cross-Phenotype Meta-Analysis (the ASSET principle behind SpASSET).
-- nnSVG: Weber, L.M., Saha, A., Datta, A., et al. (2023). nnSVG for the scalable identification of spatially variable genes.
+The workflows contain NIH Biowulf SLURM templates. Institutional paths are
+defaults from the original analyses, not package requirements. Supply your own
+project, reference, GWAS, and output roots when reusing them.
 
 ## License
 
-MIT.
+MIT License. Copyright 2026 Diptavo Dutta.

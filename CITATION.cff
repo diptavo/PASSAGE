@@ -1,0 +1,12 @@
+cff-version: 1.2.0
+message: "If you use PASSAGE, please cite this software and the associated methods paper when available."
+title: "PASSAGE: Pathway Assessment of Spatial Signatures via Aggregated Gaussian-process Estimation"
+type: software
+authors:
+  - family-names: Dutta
+    given-names: Diptavo
+version: 0.2.0
+date-released: 2026-09-01
+url: "https://github.com/diptavo/PASSAGE"
+repository-code: "https://github.com/diptavo/PASSAGE"
+license: MIT

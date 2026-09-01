@@ -1,0 +1,35 @@
+Package: PASSAGE
+Type: Package
+Title: Pathway-Level Spatial Association Testing
+Version: 0.2.0
+Authors@R: c(
+    person("Diptavo", "Dutta", role = c("aut", "cre"),
+           email = "dutta.diptavo@gmail.com")
+  )
+Author: Diptavo Dutta
+Maintainer: Diptavo Dutta <dutta.diptavo@gmail.com>
+Description: Tests whether predefined gene sets show spatially varying
+    expression after adjustment for measured covariates and background spatial
+    structure. Implements sparse spatial factor models, self-contained and
+    competitive pathway tests, pathway-level spatial effect-size and coherence
+    metrics, and stability-based driver-gene analyses.
+License: MIT + file LICENSE
+Encoding: UTF-8
+Depends:
+    R (>= 4.1.0)
+Imports:
+    Matrix,
+    stats,
+    utils
+Suggests:
+    CompQuadForm,
+    corpcor,
+    fastICA,
+    FNN,
+    irlba,
+    MASS,
+    RSpectra,
+    testthat,
+    TMB
+URL: https://github.com/diptavo/PASSAGE
+BugReports: https://github.com/diptavo/PASSAGE/issues

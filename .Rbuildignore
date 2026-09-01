@@ -1,0 +1,12 @@
+^PASSAGE[.]Rcheck$
+^[.]github$
+^[.]gitignore$
+^CITATION[.]cff$
+^analysis$
+^docs$
+^workflows$
+^results$
+^data$
+^manuscript$
+^.*[.]Rproj$
+^[.]Rproj[.]user$
