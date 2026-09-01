@@ -120,7 +120,10 @@ for (ct in names(normal_kidney)) {
 marker_refs <- do.call(rbind, rows)
 write.csv(marker_refs, file.path(root, "refs", "celltype_marker_references.csv"), row.names = FALSE)
 
-gwas_glob <- "/data/Renal_GWAS_2022_exp/sumstats/meta_20230322/gwas_ssf/meta/meta.multianc.*.sumstats.tsv.bgz"
+gwas_glob <- Sys.getenv(
+  "PASSAGE_GWAS_GLOB",
+  "/data/Renal_GWAS_2022_exp/sumstats/meta_20230322/gwas_ssf/meta/meta.multianc.*.sumstats.tsv.bgz"
+)
 gwas_files <- Sys.glob(gwas_glob)
 gwas_manifest <- data.frame(
   phenotype = sub("^meta[.]multianc[.]([^.]+)[.]sumstats[.]tsv[.]bgz$", "\\1", basename(gwas_files)),

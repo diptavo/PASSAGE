@@ -53,6 +53,19 @@ raw_refs <- data.frame(
   stringsAsFactors = FALSE
 )
 
+requested_cancers <- trimws(strsplit(
+  Sys.getenv("PASSAGE_CANCERS", ""), ",", fixed = TRUE
+)[[1L]])
+requested_cancers <- requested_cancers[nzchar(requested_cancers)]
+if (length(requested_cancers)) {
+  unknown <- setdiff(requested_cancers, spatial$cancer)
+  if (length(unknown)) {
+    stop("Unknown PASSAGE_CANCERS value(s): ", paste(unknown, collapse = ", "))
+  }
+  spatial <- spatial[spatial$cancer %in% requested_cancers, , drop = FALSE]
+  raw_refs <- raw_refs[raw_refs$cancer %in% requested_cancers, , drop = FALSE]
+}
+
 download_one <- function(url, dest) {
   dir.create(dirname(dest), recursive = TRUE, showWarnings = FALSE)
   if (file.exists(dest) && file.info(dest)$size > 0) {
@@ -195,6 +208,7 @@ tissue <- list(
     ))
   )
 )
+tissue <- tissue[intersect(names(tissue), unique(spatial$cancer))]
 for (cc in names(tissue)) {
   for (rr in names(tissue[[cc]])) {
     marker_sets <- tissue[[cc]][[rr]]

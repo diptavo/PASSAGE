@@ -3,7 +3,7 @@
 args <- commandArgs(trailingOnly = TRUE)
 root <- if (length(args) >= 1L) args[[1L]] else getwd()
 setwd(root)
-for (f in sort(list.files("SpaPath/R", pattern = "[.]R$", full.names = TRUE))) source(f)
+source(file.path(root, "scripts", "load_passage.R"))
 
 out_dir <- file.path(root, "results", "passage_cancer_summary")
 dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)

@@ -10,7 +10,7 @@ setwd(root)
 suppressPackageStartupMessages({
   library(Matrix)
 })
-for (f in sort(list.files("SpaPath/R", pattern = "[.]R$", full.names = TRUE))) source(f)
+source(file.path(root, "scripts", "load_passage.R"))
 
 manifest <- read.csv(file.path(root, "data", "passage_inputs", "passage_input_manifest.csv"),
                      stringsAsFactors = FALSE)

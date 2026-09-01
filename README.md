@@ -184,18 +184,35 @@ Useful pathway summaries include:
 cEPSV and related quantities remain useful descriptive metrics even when they
 are not calibrated as primary test statistics.
 
-## Calibration Status
+## Data Applications
 
-Null simulations and residual-null experiments have been run across breast
-cancer, kidney cancer, and DLPFC settings, including pathway-size strata. The
-current evidence supports matched Monte Carlo `score_z` as the default
-competitive test, with `score_robust_z` as a sensitivity statistic and
-empirical null recalibration when a study supplies enough exchangeable null
-replicates. See [docs/calibration.md](docs/calibration.md) for the decision
-rules and current limitations.
+Reproducible Biowulf workflows are included for breast cancer and kidney
+cancer. They download public spatial data, build expression, coordinate,
+pathway, covariate, cell-type, and matched-background inputs, submit all
+analysis through Slurm, and aggregate competitive H3 and driver results.
 
-PASSAGE is research software. Calibration must be checked for each new assay,
-normalization, spatial platform, and matching design before confirmatory use.
+```bash
+CODE=/data/Dutta_lab/SPATH/PASSAGE
+git clone https://github.com/diptavo/PASSAGE.git "$CODE"
+
+# Breast cancer: one Visium sample x two cell-type covariate panels
+BREAST_ROOT=/data/Dutta_lab/SPATH/PASSAGE_breast_application
+mkdir -p "$BREAST_ROOT"
+rsync -a "$CODE/workflows/biowulf/biowulf_cancer_panel/" "$BREAST_ROOT/"
+bash "$BREAST_ROOT/submit_pipeline.sh" "$BREAST_ROOT" "$CODE" breast 999 9999
+
+# Kidney cancer: three RCC samples x two cell-type covariate panels
+KIDNEY_ROOT=/data/Dutta_lab/SPATH/PASSAGE_kidney_application
+mkdir -p "$KIDNEY_ROOT"
+rsync -a "$CODE/workflows/biowulf/biowulf_kidney_rcc_gwas/" "$KIDNEY_ROOT/"
+bash "$KIDNEY_ROOT/submit_pipeline.sh" "$KIDNEY_ROOT" "$CODE" 999 9999
+```
+
+The cell-type inputs currently contain broad marker-derived composition scores,
+not probabilistic reference-based fractions. The optional kidney workflow adds
+post-hoc MAGMA validation with RCC, clear-cell RCC, and papillary RCC GWAS.
+See [docs/data-applications.md](docs/data-applications.md) for prerequisites,
+the GWAS command, output locations, and interpretation guidance.
 
 ## Repository Layout
 
@@ -208,6 +225,10 @@ analysis/                  calibration and method-development programs
 workflows/biowulf/         dataset and cluster workflows
 docs/                      statistical and implementation notes
 ```
+
+Application instructions are in
+[docs/data-applications.md](docs/data-applications.md); statistical calibration
+details remain in [docs/calibration.md](docs/calibration.md).
 
 The workflows contain NIH Biowulf SLURM templates. Institutional paths are
 defaults from the original analyses, not package requirements. Supply your own
