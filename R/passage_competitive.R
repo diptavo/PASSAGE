@@ -1023,7 +1023,7 @@ passage_sample_matched_indices <- function(pathway,
         if (length(cand_ex) > 0L) cand <- cand_ex
       }
       if (length(cand) == 0L) cand <- seq_len(nrow(gene_bins))
-      idx[jj] <- sample(cand, size = 1L, replace = replace)
+      idx[jj] <- cand[sample.int(length(cand), size = 1L)]
     }
     idx
   }
@@ -1108,7 +1108,7 @@ passage_sample_matched_indices <- function(pathway,
         if (length(cand_ex) > 0L) cand <- cand_ex
       }
       if (length(cand) == 0L) cand <- seq_len(nrow(gene_bins))
-      prop_idx[jj] <- sample(cand, size = 1L, replace = replace)
+      prop_idx[jj] <- cand[sample.int(length(cand), size = 1L)]
       prop_dist <- if (use_balance) balance_distance(balance_fun(prop_idx)) else 0
       log_acc <- -(prop_dist - current_dist) / max(as.numeric(importance_temperature), .Machine$double.eps)
       if (!is.finite(log_acc) || log(stats::runif(1)) <= min(0, log_acc)) {
@@ -1293,7 +1293,7 @@ passage_conditional_competitive_test <- function(engine,
                                                 precomp = NULL,
                                                 X = NULL,
                                                 gene_names = NULL,
-                                                statistic = c("score_sparse_topk_z", "score_lse_z", "score_factor_hsic", "score_coherence", "score_activity_hotspot", "score_pERSA_z", "score_pERSA_rank_z", "score_ePSA_rank_z", "score_pERSA_active_z", "score_robust_z", "score_z", "score_Q", "mean_propSV_conditional", "cEPSV", "ePSV", "cwPVE_trace", "cwPVE_top"),
+                                                statistic = c("score_z", "score_robust_z", "score_sparse_topk_z", "score_lse_z", "score_factor_hsic", "score_coherence", "score_activity_hotspot", "score_pERSA_z", "score_pERSA_rank_z", "score_ePSA_rank_z", "score_pERSA_active_z", "score_Q", "mean_propSV_conditional", "cEPSV", "ePSV", "cwPVE_trace", "cwPVE_top"),
                                                 B = 999L,
                                                 seed = NULL,
                                                 covariance = c("shrink", "sample", "diagonal"),

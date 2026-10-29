@@ -71,20 +71,25 @@
 \title{PASSAGE: pathway-level spatial association testing}
 \description{
 PASSAGE tests predefined gene sets for residual spatial association. It
-provides sparse spatial factor engines, self-contained score tests,
-size- and expression-matched competitive Monte Carlo tests, interpretable
-pathway spatial-variation and coherence summaries, and driver-gene utilities.
+provides pathway PCA and factor analysis, fixed-kernel subspace tests,
+GP covariance comparisons, and a separate global competitive analysis with
+matched gene sets.
 }
 \details{
-The primary inferential workflow is the competitive H3 test: after adjustment
-for cell-type proportions and other background structure, the observed pathway
-statistic is compared with matched random gene sets. The self-contained H1 and
-H2 tests are intended as spatial-signal screens. The \code{spapath_*} functions
-are retained for compatibility with the earlier subset-adaptive prototype.
+For pathway estimation use \code{\link{passage_fit_pathway}}. Its unsmoothed
+scores can be tested with \code{\link{passage_test_pathway_gp}} or
+\code{\link{passage_test_pathway_fit}}. For competitive analysis use
+\code{\link{passage_analyze_bundle}}, which compares pathway scores with
+unique matched gene sets using a global factor engine.
 
-Functions in this consolidated help topic form the current research API. See
-the repository README and worked examples for argument-level usage. Moment
-p-values are diagnostic; permutation or matched Monte Carlo calibration should
-be used for inference.
+The pathway tests assume independent Gaussian row errors with common gene
+covariance conditional on a fixed adjustment design. Heteroskedasticity and
+expression-derived covariates require further calibration. The competitive
+reference depends on exchangeability within the matching strata.
+
+The remaining functions in this consolidated topic support older engines and
+research analyses. The \code{spapath_*} functions retain compatibility with
+the earlier subset-adaptive prototype. See the repository methods and software
+guides for the current workflows.
 }
 \keyword{package}

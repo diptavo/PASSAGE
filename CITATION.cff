@@ -5,8 +5,8 @@ type: software
 authors:
   - family-names: Dutta
     given-names: Diptavo
-version: 0.2.0
-date-released: 2026-09-01
+version: 0.5.0
+date-released: 2026-10-29
 url: "https://github.com/diptavo/PASSAGE"
 repository-code: "https://github.com/diptavo/PASSAGE"
 license: MIT

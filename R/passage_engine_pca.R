@@ -223,7 +223,9 @@ passage_low_rank_basis <- function(R,
                                    sparse_min_loadings = 10L) {
   factor_method <- match.arg(factor_method)
   A_pca <- s$v[, seq_len(K), drop = FALSE] %*% diag(sqrt(pmax(eig, 0)), K, K)
-  V_pca <- s$u[, seq_len(K), drop = FALSE] %*% diag(s$d[seq_len(K)], K, K)
+  # A contains the singular-value scale, so V must have unit sample variance.
+  # Scaling both factors by d inflates V A' and corrupts residual variances.
+  V_pca <- s$u[, seq_len(K), drop = FALSE] * sqrt(max(1, nrow(R) - 1L))
   if (factor_method == "pca") {
     return(list(A = A_pca, V = V_pca, method = "pca"))
   }

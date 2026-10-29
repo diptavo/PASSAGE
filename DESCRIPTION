@@ -1,7 +1,7 @@
 Package: PASSAGE
 Type: Package
 Title: Pathway-Level Spatial Association Testing
-Version: 0.2.0
+Version: 0.5.0
 Authors@R: c(
     person("Diptavo", "Dutta", role = c("aut", "cre"),
            email = "dutta.diptavo@gmail.com")
@@ -12,7 +12,9 @@ Description: Tests whether predefined gene sets show spatially varying
     expression after adjustment for measured covariates and background spatial
     structure. Implements sparse spatial factor models, self-contained and
     competitive pathway tests, pathway-level spatial effect-size and coherence
-    metrics, and stability-based driver-gene analyses.
+    metrics, and stability-based driver-gene analyses. Includes pathway-only
+    component estimation, fixed-kernel subspace tests, and fitted Gaussian
+    process covariance comparisons with conditional rotation calibration.
 License: MIT + file LICENSE
 Encoding: UTF-8
 Depends:
@@ -26,6 +28,7 @@ Suggests:
     corpcor,
     fastICA,
     FNN,
+    GpGp,
     irlba,
     MASS,
     RSpectra,
