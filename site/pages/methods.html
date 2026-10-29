@@ -1,0 +1,76 @@
+<div class="page-intro">
+  <p class="eyebrow">Understand PASSAGE</p>
+  <h1>Methods</h1>
+  <p class="lead">A pathway is a collection of genes. PASSAGE summarizes their shared activity, then asks what its pattern across tissue tells us.</p>
+  <div class="page-links"><a href="{{prefix}}software/">Software guide →</a><a href="{{prefix}}example/">Example analysis →</a></div>
+</div>
+<h2 id="questions">Two scientific questions</h2>
+<div class="cards">
+  <div class="card"><p class="eyebrow">Self-contained</p><h3>Does this pathway have spatial structure?</h3><p>After accounting for the chosen covariates, do nearby spots have related pathway activity? The reference is a pathway with no remaining cross-spot spatial dependence under the working model.</p></div>
+  <div class="card"><p class="eyebrow">Competitive</p><h3>Is it more spatial than comparable genes?</h3><p>Does the pathway’s spatial score exceed those of matched gene sets drawn from the measured background? The reference is other genes, rather than an absence of all spatial structure.</p></div>
+</div>
+<p>A pathway can pass the self-contained test without passing the competitive test. For example, it may follow a broad tissue pattern that many other genes also follow. Passing both provides evidence of spatial organization and enrichment relative to the chosen background; it does not establish a causal mechanism.</p>
+<h2 id="workflow">How estimation feeds testing</h2>
+<div class="flow" aria-label="Self-contained analysis workflow">
+  <div><span class="step">01 / ADJUST</span><b>Expression within a pathway</b><small>Remove variation explained by the specified covariates.</small></div>
+  <div><span class="step">02 / ESTIMATE</span><b>Activity components</b><small>Use PCA or factor analysis to obtain spot scores and gene loadings.</small></div>
+  <div><span class="step">03 / TEST</span><b>Spatial organization</b><small>Test the estimated, unsmoothed scores using tissue coordinates.</small></div>
+</div>
+<p><strong>Estimation contributes the representation that is tested.</strong> Instead of treating every pathway gene as a separate outcome, PASSAGE extracts a few joint patterns. Each component assigns a score to every spot; its loadings describe the genes contributing to that pattern. A spatial test then examines these estimated scores.</p>
+<p>In the GP comparison, estimation also occurs inside the test: PASSAGE fits a spatial range and a spatial variance fraction for each component. How much those fitted models improve on nonspatial models determines the test statistic. The null simulations repeat that parameter search.</p>
+<p>The competitive workflow has its own estimation step. It fits a global PCA model across the full gene background, then uses the fitted loadings, residual variances and spatial kernels to score target and matched gene sets. It does not reuse the pathway-only fits.</p>
+<h2 id="estimation">Choose an activity representation</h2>
+<div class="table-wrap"><table><thead><tr><th>Option</th><th>Intuition</th><th>Choice to make</th></tr></thead><tbody>
+  <tr><td>Pathway PCA</td><td>Find combinations of pathway genes that explain the most adjusted expression variation. Genes are not scaled to unit variance.</td><td>Retain 95% of adjusted variance by default, or choose a fixed number of components, <code>K</code>.</td></tr>
+  <tr><td>Pathway factor analysis</td><td>Model common variation among standardized genes while allowing gene-specific noise. Use unrotated regression factor scores.</td><td>Specify an identifiable <code>K</code>. The gene correlation matrix must be nonsingular.</td></tr>
+  <tr><td>Global PCA</td><td>Learn expression patterns shared across the whole supplied gene universe, then evaluate pathways through that fitted model.</td><td>Used by the standard competitive workflow; retain a sufficiently broad background.</td></tr>
+</tbody></table></div>
+<p>Pathway PCA and factor analysis use expression and covariates, without coordinates. Their scores remain unsmoothed for testing. Smoothing would impose spatial similarity even on noise and would need a different null calibration.</p>
+<p>Rank changes the biological signal that can be detected. A small rank is compact but can discard a weak spatial pattern. A variance threshold retains more variation but may include additional noise. Choose the rule before inspecting p-values. Every pathway test concerns the <em>retained components</em>, not every possible pattern in the pathway.</p>
+<h2 id="inference">Choose an inference route</h2>
+<h3>1. GP covariance comparison</h3>
+<p><strong>Intuition:</strong> compare two explanations of the component scores: independent spot noise, or noise plus a spatially correlated signal. A Gaussian process (GP) describes how strongly activity is related at different distances.</p>
+<p>The test searches a prespecified grid of spatial ranges and variance fractions for each component. It adds the improvements in fit across components. With correlated factor-analysis scores this is a composite statistic, rather than a joint independent-factor likelihood ratio.</p>
+<p><strong>How the reference is made:</strong> jointly rotate the estimated scores in the covariate-residual space, preserving their cross-component relationships but randomizing their orientation relative to the tissue. Repeat the same GP fitting on each draw. The p-value measures how often a null statistic is at least as large as the observed one; it is not taken from a standard chi-square table.</p>
+<p>Under the stated Gaussian null, these rotations preserve the gene cross-products used by pathway PCA and the implemented factor analysis. The estimator’s loadings and rank rule can be conditioned on, so repeatedly refitting PCA or FA is unnecessary. Repeating the GP parameter search remains necessary because spatial fit changes with the rotation.</p>
+<p><strong>Use:</strong> the primary self-contained route in the example. The low-rank kernel approximation makes larger datasets practical while retaining all spots. The dense option is a reference for smaller datasets. These are computational choices for the same testing question; feature count can still change approximation accuracy and power.</p>
+<h3>2. Fixed-kernel subspace tests</h3>
+<p><strong>Intuition:</strong> choose a spatial similarity pattern in advance and ask how closely the estimated pathway span aligns with it. The <em>trace</em> statistic collects alignment across directions; the <em>largest root</em> emphasizes the strongest direction.</p>
+<p><strong>How the reference is made:</strong> compare the observed alignment with random Gaussian subspaces after covariate adjustment. The optional omnibus p-value corrects for trying both statistics within the pathway. It does not correct for multiple pathways.</p>
+<p><strong>Use:</strong> a prespecified spatial-scale analysis or a sensitivity analysis alongside the GP test. A range learned from the same scores cannot simply be plugged into this fixed-kernel reference. The implemented largest-root test uses simulated calibration, not an ordinary Tracy–Widom approximation. These APIs also do not implement PC-wise SKAT with Davies calibration or Fisher/ACAT combinations.</p>
+<h3>3. Competitive matched-set testing</h3>
+<p><strong>Intuition:</strong> compare the pathway with other gene sets that had a similar opportunity to show signal. The standard workflow fits global PCA followed by spatial modeling with a Vecchia approximation, which represents GP dependence through local neighbor relationships.</p>
+<p>Default comparison sets match expression level, detection frequency and variance. Each set contains unique genes and excludes the target pathway’s genes. The procedure preserves matching-stratum counts and stops if the background cannot support the match. Optional module matching can add another constraint.</p>
+<p><strong>How the reference is made:</strong> compute the same score for many matched sets and count how often they reach or exceed the target score. The field <code>score_z</code> is a statistic name; its p-value comes from this empirical comparison, not a standard-normal tail.</p>
+<div class="callout"><p><strong>These workflows are complementary.</strong> The current competitive API uses a global fit. A competitive version of the pathway-only GP test would need to fit PCA or FA and the GP comparison again for every matched set. That route is not currently implemented.</p></div>
+<h2 id="outputs">Read the outputs</h2>
+<div class="table-wrap"><table><thead><tr><th>Output</th><th>What it tells you</th><th>How to interpret it</th></tr></thead><tbody>
+  <tr><td>Spot scores</td><td>Where each estimated component is relatively high or low.</td><td>Component signs are arbitrary. Read scores together with loadings; they are not absolute activation measurements.</td></tr>
+  <tr><td>Gene loadings and coverage</td><td>Which genes define each pattern, and which requested genes were observed, missing or dropped.</td><td>A result with poor pathway coverage may describe only a subset of the intended biology.</td></tr>
+  <tr><td>GP spatial fraction and range</td><td>The fitted share of residual component variance assigned to spatial covariance, and its distance scale.</td><td>These are grid estimates without confidence intervals. Check boundary flags; range is unidentified when the spatial fraction is zero.</td></tr>
+  <tr><td>Self-contained p-value</td><td>Evidence against the working no-spatial-structure null for the retained representation.</td><td>A small value does not measure effect size, identify a tissue compartment or prove pathway specificity.</td></tr>
+  <tr><td>Competitive p-value and score excess</td><td>Evidence and magnitude relative to the chosen matched background.</td><td>The answer depends on the gene universe and matching design.</td></tr>
+  <tr><td>Adjusted p-values and candidate drivers</td><td>Multiplicity summaries and genes that contribute to a competitive result.</td><td>Define the testing family in advance. Driver rankings are exploratory, not causal gene assignments.</td></tr>
+</tbody></table></div>
+<p>Monte Carlo resolution depends on the number of null draws, <code>B</code>. The smallest raw p-value is <code>1 / (B + 1)</code>: 0.005 for 199 draws and 0.0001 for 9,999. The fixed-test omnibus has twice that floor because it corrects over two statistics. More draws improve tail resolution; they do not repair a misspecified null model.</p>
+<h2 id="assumptions">Adjustment and current limits</h2>
+<p>Covariates define the question. Adjusting for technical measurements asks about signal beyond those measurements. Adjusting for cell composition asks about signal beyond the estimated cell mixture, which can remove biology you intended to study. Estimates derived from the same expression are treated as fixed here; their uncertainty is not propagated.</p>
+<div class="callout caution"><p><strong>Spatially varying noise remains a limitation.</strong> The pathway references assume independent Gaussian spot errors with a common gene covariance after adjustment. They allow genes to be correlated, but do not allow arbitrary location-dependent noise variance. A variance gradient can appear significant even without correlation between spots.</p><p>In a 200-replicate pilot, GP rejection rates under Gaussian nulls were 2.0–4.5% at a nominal 5%. Under a strong heteroskedastic null stress, they rose to 14.5–25.0%; fixed-kernel tests also inflated. A calibrated heteroskedasticity correction is not implemented.</p></div>
+<p>Competitive testing has a different assumption: target and comparison genes must be exchangeable within the matching strata. Matching a few summaries helps define a relevant comparison but does not establish this assumption for every dataset.</p>
+<p>Before interpreting findings, examine QC and gene coverage, check approximation sensitivity using prespecified settings, define the family of pathways and samples, and seek replication. See the <a href="https://github.com/diptavo/PASSAGE/blob/main/docs/method_choices.md#validation-and-current-limits">detailed pilot and mathematical specification</a> for the scope of current validation.</p>
+<h2 id="other-engines">Other fitting engines</h2>
+<p>The R package also provides research options for estimating spatial factors. A fitting engine estimates a representation; it does not automatically supply a calibrated pathway test.</p>
+<details><summary>Intuition behind the advanced options</summary>
+  <div class="table-wrap"><table><thead><tr><th>Engine</th><th>Intuition and role</th></tr></thead><tbody>
+    <tr><td><code>spatial_basis</code></td><td>Describe expression using smooth spatial basis functions, then compress the fitted surface into factors.</td></tr>
+    <tr><td><code>smoothed_pca</code></td><td>Start with PCA, smooth the component scores over space and refit gene loadings.</td></tr>
+    <tr><td><code>nmf</code></td><td>Initialize factors from a nonnegative representation of shifted expression. Later centering and refitting do not guarantee nonnegative final loadings.</td></tr>
+    <tr><td><code>alternating_gp</code></td><td>Alternate between updating GP-penalized activity scores, gene loadings, noise and spatial ranges.</td></tr>
+    <tr><td>Joint factor model with TMB</td><td>Fit latent GP factors and expression parameters together in a compiled likelihood model. This has a separate interface and result class.</td></tr>
+  </tbody></table></div>
+  <p>These are lower-level options, not interchangeable arguments to the kidney example. Coordinate-informed or smoothed scores cannot replace unsmoothed PCA/FA scores in the current pathway rotation tests without new calibration. TMB model-comparison outputs are not a calibrated test of zero spatial variance at the boundary.</p>
+</details>
+<p>The separate GpGp function fits descriptive covariance models and reports convergence. It does not provide pathway-test p-values or feed its estimates into the main tests. The GP comparison already estimates its own spatial parameters internally.</p>
+<h2 id="gwas">Where GWAS fits</h2>
+<p>Spatial analysis can prioritize pathways and genes for a genetic follow-up. GWAS integration is a separate downstream analysis requiring GWAS statistics, a defined variant-to-gene mapping strategy, and an association or enrichment method that accounts for linkage disequilibrium. A spatial PASSAGE result alone is not evidence of a genetic association.</p>
+<div class="next"><a href="{{prefix}}software/">Next: install and run PASSAGE →</a><a href="{{prefix}}example/">Go to the worked example →</a></div>

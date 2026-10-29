@@ -1,0 +1,21 @@
+<div class="page-intro">
+  <p class="eyebrow">Spatial transcriptomics · R package</p>
+  <h1>From expression<br>to spatial pathways.</h1>
+  <p class="lead">PASSAGE estimates pathway activity across tissue and asks whether that activity has spatial structure—and whether it stands out from comparable genes.</p>
+  <div class="page-links"><a href="{{prefix}}methods/">Understand the methods →</a><a href="{{prefix}}example/">Run the kidney example →</a></div>
+</div>
+<h2 id="start">Start with your question</h2>
+<div class="cards">
+  <div class="card"><p class="eyebrow">Self-contained testing</p><h3>Is this pathway spatial?</h3><p>Estimate components using the pathway’s own genes. Test whether their activity varies systematically across tissue, after covariate adjustment.</p></div>
+  <div class="card"><p class="eyebrow">Competitive testing</p><h3>Does it stand out?</h3><p>Use the full gene background to ask whether the pathway has more spatial signal than gene sets with comparable expression, detection and variance.</p></div>
+</div>
+<h2 id="documentation">Three guides, one workflow</h2>
+<div class="cards three">
+  <div class="card"><p class="eyebrow">01 · Understand</p><h3><a href="{{prefix}}methods/">Methods</a></h3><p>The intuition, inference options and meaning of the results.</p></div>
+  <div class="card"><p class="eyebrow">02 · Use</p><h3><a href="{{prefix}}software/">Software guide</a></h3><p>Installation, input format and R functions for your own data.</p></div>
+  <div class="card"><p class="eyebrow">03 · Reproduce</p><h3><a href="{{prefix}}example/">Example analysis</a></h3><p>A prepared kidney sample, three pathways and simple commands.</p></div>
+</div>
+<h2 id="scope">What the software provides</h2>
+<p>PASSAGE returns spot-level component scores, gene loadings, spatial covariance estimates, self-contained and competitive p-values, coverage diagnostics and reproducible analysis records. The bundled example includes 2,166 spots and all 17,630 prepared genes, so both testing questions can be explored.</p>
+<div class="callout caution"><p><strong>Research scope.</strong> The current Gaussian-reference pathway tests are sensitive to spatially varying noise variance. Successful execution is separate from statistical calibration. Read the <a href="{{prefix}}methods/#assumptions">assumptions and current limits</a> before interpreting an analysis.</p></div>
+<p class="small">PASSAGE stands for Pathway Assessment of Spatial Signatures via Aggregated Gaussian-process Estimation. This documentation describes version 0.5.0 and its current example workflow.</p>

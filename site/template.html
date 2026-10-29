@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="{{description}}">
+  <meta name="theme-color" content="#173e3b">
+  <title>{{title}} · PASSAGE documentation</title>
+  <link rel="canonical" href="https://diptavo.github.io/PASSAGE/{{route}}">
+  <link rel="icon" href="{{prefix}}assets/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="{{prefix}}assets/style.css">
+  <script src="{{prefix}}assets/site.js" defer></script>
+</head>
+<body>
+  <a class="skip" href="#main">Skip to content</a>
+  <header class="site-header">
+    <div class="header-inner">
+      <a class="brand" href="{{prefix}}"><span class="brand-mark" aria-hidden="true">P</span> PASSAGE</a>
+      <nav aria-label="Main navigation">{{nav}}<a class="github" href="https://github.com/diptavo/PASSAGE">GitHub ↗</a></nav>
+    </div>
+  </header>
+  <div class="layout">
+    <aside class="sidebar" aria-label="On this page">
+      <p class="eyebrow">On this page</p>
+      <nav>{{toc}}</nav>
+      <div class="version">R package · v0.5.0<br>Research software</div>
+    </aside>
+    <main id="main" tabindex="-1">{{body}}</main>
+  </div>
+  <footer class="site-footer"><div><strong>PASSAGE</strong><span>Pathway analysis in spatial transcriptomics</span></div><div><a href="https://github.com/diptavo/PASSAGE/blob/main/NEWS.md">Release notes</a><a href="https://github.com/diptavo/PASSAGE/blob/main/LICENSE">MIT license</a><span>© 2026 Diptavo Dutta</span></div></footer>
+</body>
+</html>

@@ -1,0 +1,96 @@
+<div class="page-intro">
+  <p class="eyebrow">Reproduce an analysis</p>
+  <h1>Kidney example</h1>
+  <p class="lead">Analyze hypoxia, angiogenesis and inflammatory response in a prepared KC2 kidney cancer sample—with both self-contained and competitive testing.</p>
+  <div class="page-links"><a href="{{prefix}}methods/">Methods →</a><a href="{{prefix}}software/">Software guide →</a></div>
+</div>
+<h2 id="data">What is included</h2>
+<div class="cards three">
+  <div class="card"><p class="eyebrow">Tissue</p><h3>2,166 spots</h3><p>Aligned coordinates, expression, QC and adjustment covariates.</p></div>
+  <div class="card"><p class="eyebrow">Background</p><h3>17,630 genes</h3><p>All prepared genes retained for matched competitive comparisons.</p></div>
+  <div class="card"><p class="eyebrow">Gene sets</p><h3>3 pathways</h3><p>Complete Hallmark lists, with observed and missing genes tracked.</p></div>
+</div>
+<div class="table-wrap"><table><thead><tr><th>Hallmark pathway</th><th>Listed genes</th><th>Observed genes</th></tr></thead><tbody>
+  <tr><td><code>HALLMARK_HYPOXIA</code></td><td>200</td><td>190</td></tr>
+  <tr><td><code>HALLMARK_ANGIOGENESIS</code></td><td>36</td><td>32</td></tr>
+  <tr><td><code>HALLMARK_INFLAMMATORY_RESPONSE</code></td><td>200</td><td>197</td></tr>
+</tbody></table></div>
+<p>The package contains normalized expression, raw counts, image-pixel coordinates, reference-informed composition estimates and the design matrix. Expression is <code>log1p(10000 × counts / original spot library size)</code>. The design has an intercept, standardized library-size and detected-gene measures, and ten composition columns. One fraction is omitted to avoid collinearity.</p>
+<p>Genes were retained if detected in at least three spots and nonconstant. This prepared sample has no additional UMI-based spot exclusion. The runner translates coordinates and scales both axes by the longest span. It keeps every prepared spot and gene; it does not restrict the competitive background to the three pathways.</p>
+<h2 id="install">Install once</h2>
+<p>In a terminal:</p>
+<pre><code class="language-bash">git clone https://github.com/diptavo/PASSAGE.git
+cd PASSAGE
+Rscript -e 'install.packages(c("remotes", "irlba"), repos="https://cloud.r-project.org")'
+Rscript -e 'remotes::install_local(".", upgrade="never")'</code></pre>
+<p>If you already have the repository, enter its <code>PASSAGE</code> directory, run <code>git pull --ff-only</code>, then rerun the installation command. No separate dataset download is needed.</p>
+<h2 id="run">Run all three pathways</h2>
+<pre><code class="language-bash">Rscript inst/examples/run_kidney.R</code></pre>
+<p>This uses three pathway PCs and 199 null draws. It writes <code>results/kidney_all/</code> and performs:</p>
+<ol>
+  <li>Covariate-adjusted PCA separately within each pathway, saving scores and loadings.</li>
+  <li>The self-contained GP covariance comparison, sharing a 64-feature kernel cache across pathways.</li>
+  <li>Fixed-kernel trace and largest-root tests, combined into a corrected omnibus result as a sensitivity analysis.</li>
+  <li>Global PCA across all 17,630 genes, followed by competitive testing against matched sets that exclude each target pathway.</li>
+</ol>
+<p>For better Monte Carlo resolution, use 9,999 draws and a new output directory:</p>
+<pre><code class="language-bash">Rscript inst/examples/run_kidney.R all 9999 results/kidney_9999</code></pre>
+<p><code>199</code> is an execution check with a raw p-value floor of 0.005; <code>9999</code> lowers that floor to 0.0001. Choose draws for the intended testing threshold. Increasing draws does not address model misspecification.</p>
+<h2 id="options">Choose a route or estimator</h2>
+<p>Run only the route you need:</p>
+<pre><code class="language-bash">Rscript inst/examples/run_kidney.R competitive 9999 results/kidney_competitive
+Rscript inst/examples/run_kidney.R gp 9999 results/kidney_gp
+Rscript inst/examples/run_kidney.R fixed 9999 results/kidney_fixed</code></pre>
+<p>The final optional arguments select the pathway estimator and rank:</p>
+<pre><code class="language-bash"># Three pathway factors
+Rscript inst/examples/run_kidney.R gp 199 results/kidney_fa factor_analysis 3
+
+# Enough pathway PCs to retain 95% of adjusted variance
+Rscript inst/examples/run_kidney.R gp 199 results/kidney_pca95 pca auto</code></pre>
+<div class="table-wrap"><table><thead><tr><th>Setting</th><th>Example default</th><th>Interpretation</th></tr></thead><tbody>
+  <tr><td>Pathway estimator</td><td><code>pca 3</code></td><td>A compact, prespecified representation for a quick run. The core PCA API still defaults to 95% variance retention.</td></tr>
+  <tr><td>GP comparison</td><td>64 features; ranges 0.05, 0.1, 0.2, 0.4</td><td>Low-rank covariance over all spots. Ranges use the scaled coordinate units.</td></tr>
+  <tr><td>Fixed kernel</td><td>Range 0.25</td><td>A prespecified-scale sensitivity analysis.</td></tr>
+  <tr><td>Competitive fit</td><td>Global PCA, 6 factors, 20 neighbors</td><td>Its own estimation workflow, with the same four candidate ranges. Pathway <code>METHOD</code> and <code>K</code> arguments do not change it.</td></tr>
+</tbody></table></div>
+<p>The argument order is <code>MODE B OUTPUT METHOD K</code>. Modes are <code>all</code>, <code>gp</code>, <code>fixed</code> and <code>competitive</code>. Output directories must be new or empty, so repeated runs do not overwrite previous results.</p>
+<h2 id="from-r">Run from R</h2>
+<p>After <a href="{{prefix}}software/#install">installing PASSAGE and irlba</a>, the installed package also provides the same runner. A repository checkout is unnecessary:</p>
+<pre><code class="language-r">library(PASSAGE)
+source(system.file("examples", "run_kidney.R", package = "PASSAGE"))
+run_kidney()
+
+# Check a prespecified alternative kernel approximation
+run_kidney(mode = "gp", B = 199, n_features = 128,
+           output = "results/kidney_gp128")</code></pre>
+<p>To inspect the bundle or use the individual R functions:</p>
+<pre><code class="language-r">b &lt;- passage_validate_bundle(
+  system.file("extdata", "kidney_KC2.rds", package = "PASSAGE")
+)
+dim(b$Y)
+names(b$pathway_sets)
+colnames(b$X)</code></pre>
+<details><summary>Add descriptive GpGp fits</summary>
+<pre><code class="language-r">install.packages(c("GpGp", "fields"))
+run_kidney(mode = "gp", B = 199, descriptive_gp = TRUE,
+           output = "results/kidney_descriptive")</code></pre>
+<p>Inspect convergence flags for these optional component fits. They are separate from the GP test and do not supply its p-value.</p>
+</details>
+<h2 id="results">Read the results</h2>
+<pre><code class="language-r">results &lt;- read.csv("results/kidney_all/summary.csv")
+results[, c("pathway", "test", "p", "q_BH_within_test")]</code></pre>
+<p><code>summary.csv</code> has nine rows for an <code>all</code> run: three pathways × three test routes. It records raw p-values, BH/BY adjustments across pathways within each route, and BH/BY adjustments across all nine reported hypotheses.</p>
+<div class="table-wrap"><table><thead><tr><th>File or field</th><th>What to inspect</th></tr></thead><tbody>
+  <tr><td><code>q_BH_within_test</code><br><code>q_BY_within_test</code></td><td>Adjustment across the three pathways for that test route.</td></tr>
+  <tr><td><code>q_BH_all_reported</code><br><code>q_BY_all_reported</code></td><td>Adjustment across all nine pathway-test hypotheses. Choose the family before interpreting results.</td></tr>
+  <tr><td><code>mc_floor</code></td><td>Minimum attainable p-value. The fixed-test omnibus has twice the raw floor because it corrects over two statistics.</td></tr>
+  <tr><td>Each pathway directory</td><td>Fitted components, score and loading tables, test objects and GP component-fit diagnostics.</td></tr>
+  <tr><td><code>competitive_summary.csv</code><br><code>competitive_result.rds</code></td><td>Competitive p-values, effect and coherence summaries, candidate drivers and saved matched-null results.</td></tr>
+  <tr><td><code>configuration.rds</code><br><code>sessionInfo.txt</code><br><code>analysis.complete</code></td><td>Input checksum, design, coordinate scaling, settings, runtime and environment. The completion marker appears only after every requested step succeeds.</td></tr>
+</tbody></table></div>
+<p>The GP comparison is the example’s primary self-contained test. The fixed-kernel result is a sensitivity analysis, and the competitive result answers a separate background-relative question. Read the <a href="{{prefix}}methods/#outputs">output interpretation</a> before comparing them.</p>
+<div class="callout caution"><p><strong>This is a runnable analysis, not a biological validation.</strong> Composition covariates were estimated from the same counts and are treated as fixed. Current Gaussian-reference tests are sensitive to spatially varying noise variance. Review QC, matching, calibration and replication before claiming pathway activity specific to a disease or cell population.</p></div>
+<h2 id="provenance">Data provenance and scope</h2>
+<p>The source kidney data are from Dawo, Nonchev and Silina’s <a href="https://zenodo.org/records/14620362">Zenodo deposit (2025, version 1)</a>, DOI 10.5281/zenodo.14620362, under CC BY 4.0. The Human MSigDB Hallmark lists retain their <a href="https://www.gsea-msigdb.org/gsea/msigdb_license_terms.jsp">source license terms</a>. The gene-set snapshot was prepared on October 22, 2026; its exact MSigDB release number was not recorded.</p>
+<p>The <a href="https://github.com/diptavo/PASSAGE/blob/main/inst/extdata/kidney_KC2_SOURCE.md">provenance record</a> documents preprocessing, the composition reference, attribution, licenses and the bundled file checksum. Histology images and annotations are not included. GWAS integration requires separate genetic data and an LD-aware downstream method.</p>
+<div class="next"><a href="{{prefix}}software/">← Software guide</a><a href="{{prefix}}methods/#outputs">Return to interpretation →</a></div>

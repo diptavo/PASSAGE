@@ -1,0 +1,147 @@
+<div class="page-intro">
+  <p class="eyebrow">Use PASSAGE</p>
+  <h1>Software guide</h1>
+  <p class="lead">Install the R package, prepare aligned inputs, and run the testing workflow that answers your question.</p>
+  <div class="page-links"><a href="{{prefix}}methods/">Methods and interpretation →</a><a href="{{prefix}}example/">Prepared example analysis →</a></div>
+</div>
+<h2 id="install">Install</h2>
+<p>Use R 4.1 or later. Install from GitHub, with <code>irlba</code> for fast global PCA on larger gene backgrounds:</p>
+<pre><code class="language-r">install.packages(c("remotes", "irlba"))
+remotes::install_github("diptavo/PASSAGE")
+library(PASSAGE)
+packageVersion("PASSAGE")</code></pre>
+<p>The core package requires <code>Matrix</code>. Pathway PCA, factor analysis and the GP comparison need no additional packages. Optional descriptive fits require <code>GpGp</code> and <code>fields</code>; the separate joint-factor engine requires <code>TMB</code>, <code>RcppEigen</code> and a working C++ compiler.</p>
+<div class="callout"><p><strong>Start with a prepared sample.</strong> The <a href="{{prefix}}example/">KC2 example</a> is included in the installed package. It runs estimation, both self-contained routes and competitive testing without downloading another dataset.</p></div>
+<h2 id="inputs">Prepare your inputs</h2>
+<p>A PASSAGE bundle is an ordinary R list. Normalize expression and establish the adjustment design before creating it. The names below stand for your prepared matrices:</p>
+<pre><code class="language-r">bundle &lt;- list(
+  Y = expression_matrix,       # spots x genes
+  coords = coordinate_matrix, # spots x spatial dimensions
+  X = design_matrix,          # spots x covariates; NULL for intercept only
+  pathway_sets = list(
+    pathway_A = pathway_A_genes,
+    pathway_B = pathway_B_genes
+  ),
+  sample = "sample_01"
+)
+bundle &lt;- passage_validate_bundle(bundle)
+saveRDS(bundle, "sample.rds")</code></pre>
+<div class="table-wrap"><table><thead><tr><th>Input</th><th>Required structure</th></tr></thead><tbody>
+  <tr><td><code>Y</code></td><td>Finite normalized expression, spots in rows and genes in columns. Unique spot IDs and gene names. Keep the full eligible gene universe for competitive testing.</td></tr>
+  <tr><td><code>coords</code></td><td>Finite, unique coordinates. Row names must match the spot IDs in <code>Y</code>, in exactly the same order.</td></tr>
+  <tr><td><code>X</code></td><td>Finite, full-rank covariate design with matching spot names and order. An intercept is added if absent. Omit one composition fraction when fractions sum to one and an intercept is present.</td></tr>
+  <tr><td><code>pathway_sets</code></td><td>A named list of gene vectors, using the same gene identifiers as <code>colnames(Y)</code>. Keep the intended gene lists so missing-gene coverage can be reported.</td></tr>
+</tbody></table></div>
+<p>Validation checks dimensions, identifiers, alignment and finite values; it does not normalize raw counts or establish model assumptions. A bundle needs at least 10 spots and five genes. Pathway fitting needs at least two observed genes with nonzero adjusted variance. Competitive testing defaults to observed pathway sizes of 15–500 and requires sufficient matched background genes.</p>
+<p>Optional <code>cell_type_proportions</code> records all aligned fractions and checks their row sums. It does not automatically add them to <code>X</code>. Choose adjustment columns explicitly.</p>
+<h2 id="pathway">Estimate and test one pathway</h2>
+<p>The following assumes that <code>sample.rds</code> contains the bundle above. Scale coordinates with one common factor so the tissue aspect ratio is preserved:</p>
+<pre><code class="language-r">library(PASSAGE)
+b &lt;- passage_validate_bundle("sample.rds")
+
+xy &lt;- sweep(b$coords, 2, apply(b$coords, 2, min), "-")
+xy &lt;- xy / max(xy)
+
+fit &lt;- passage_fit_pathway(
+  b$Y, b$pathway_sets[["pathway_A"]], X = b$X,
+  method = "pca", variance_threshold = 0.95
+)
+
+test &lt;- passage_test_pathway_gp(
+  fit, coords = xy,
+  ranges = c(0.05, 0.1, 0.2, 0.4),
+  kernel_method = "lowrank", n_features = 64,
+  B = 9999, seed = 1
+)
+
+test$p
+test$component_fits
+fit$K
+fit$missing_genes
+fit$dropped_genes
+saveRDS(list(fit = fit, test = test), "pathway_result.rds")</code></pre>
+<p>The R API uses the coordinate units supplied. Here, the longest axis spans one, so the range grid is in those units. <code>fit$scores</code> contains spot activity and <code>fit$loadings</code> contains gene contributions. The test uses these unsmoothed scores.</p>
+<h3>Estimation choices</h3>
+<pre><code class="language-r"># Fixed-rank PCA
+fit &lt;- passage_fit_pathway(
+  b$Y, b$pathway_sets[["pathway_A"]], X = b$X,
+  method = "pca", K = 2
+)
+
+# Maximum-likelihood factor analysis
+fit_fa &lt;- passage_fit_pathway(
+  b$Y, b$pathway_sets[["pathway_A"]], X = b$X,
+  method = "factor_analysis", K = 2
+)</code></pre>
+<p>FA requires a fixed, identifiable rank and a nonsingular gene correlation matrix. A rank suitable for PCA is not automatically suitable for FA. Either fit can be passed to the pathway GP test when those requirements are met.</p>
+<h3>Kernel and simulation choices</h3>
+<div class="table-wrap"><table><thead><tr><th>Setting</th><th>How to choose it</th></tr></thead><tbody>
+  <tr><td><code>kernel_method</code></td><td><code>lowrank</code> keeps all spots with a Nyström kernel approximation. <code>dense</code> provides a reference for smaller data; its default limit is 1,000 spots.</td></tr>
+  <tr><td><code>n_features</code></td><td>64 is a starting point, not an accuracy guarantee. Compare prespecified feature counts and a dense reference where affordable.</td></tr>
+  <tr><td><code>ranges</code></td><td>A positive grid in the supplied coordinate units. Decide it before inspecting results.</td></tr>
+  <tr><td><code>fractions</code></td><td>Defaults to <code>c(0, .01, .025, .05, .1, .25, .5, .75, .9, .97)</code>. A custom grid must include zero and stay below one.</td></tr>
+  <tr><td><code>B</code></td><td>199 is useful for an execution check. 9,999 allows a raw p-value floor of 0.0001. Choose enough draws for your multiple-testing threshold.</td></tr>
+</tbody></table></div>
+<h3>Reuse coordinate work across pathways</h3>
+<pre><code class="language-r">cache &lt;- passage_prepare_gp_kernel(
+  xy, X = b$X,
+  ranges = c(0.05, 0.1, 0.2, 0.4), n_features = 64
+)
+test &lt;- passage_test_pathway_gp(
+  fit, kernel_cache = cache, B = 9999, seed = 1
+)</code></pre>
+<p>Reuse a cache only for the same spots, order and adjustment design. Cache settings govern the test; conflicting explicit settings produce an error.</p>
+<h2 id="fixed">Run the fixed-kernel alternative</h2>
+<pre><code class="language-r">fixed &lt;- passage_test_pathway_fit(
+  fit, coords = xy, kernel_range = 0.25,
+  B = 9999, seed = 1
+)
+fixed$p
+fixed$p_omnibus_bonferroni</code></pre>
+<p>This tests trace and largest-root alignment at a prespecified spatial range. The omnibus corrects over those two statistics only. This dense implementation has a default 3,000-spot limit and does not silently subset the data. If also running the GP comparison, decide which is primary before inspecting results.</p>
+<h2 id="competitive">Run competitive analysis</h2>
+<pre><code class="language-r">b &lt;- passage_validate_bundle("sample.rds")
+competitive &lt;- passage_analyze_bundle(b, B = 9999, seed = 1)
+competitive$summary
+competitive$coverage
+saveRDS(competitive, "competitive_result.rds")</code></pre>
+<p>This route fits global PCA across the supplied gene universe, with defaults of six factors and 20 Vecchia neighbors. It compares pathways with matched sets drawn from the background. Retaining only the target genes in <code>Y</code> would remove that background.</p>
+<p>The main summary fields include <code>p_competitive</code>, <code>q_BH</code>, <code>q_BY</code>, <code>score_excess</code> and <code>candidate_drivers</code>. BH/BY adjustments cover the eligible pathways in that call. If several samples belong to the same testing family, collect and adjust the relevant p-values together.</p>
+<p>If matching fails, inspect coverage and the matching strata. Custom <code>gene_bins</code> must contain <code>gene</code> and <code>bin</code>, with optional <code>module</code>, in exactly the order of the nonconstant expression columns. Do not replace a failed matched comparison with an unmatched result without redefining the analysis.</p>
+<h2 id="optional">Optional descriptive fits</h2>
+<pre><code class="language-r">install.packages(c("GpGp", "fields"))
+descriptive &lt;- passage_fit_pathway_gp(fit, xy)
+descriptive$summary</code></pre>
+<p>This reports component covariance estimates and convergence from GpGp. It does not return a spatial-test p-value or provide inputs to the tests above. The main GP comparison fits its own parameters.</p>
+<p>Advanced fitting engines are described in the <a href="{{prefix}}methods/#other-engines">Methods page</a>. They use <code>passage_fit_factor_engine()</code> or the separate <code>passage_fit_joint_factor_tmb()</code> interface. They require a custom lower-level workflow, and coordinate-informed scores need their own inferential calibration.</p>
+<h2 id="cli">Use the command line</h2>
+<p>For the bundled dataset, use the short commands on the <a href="{{prefix}}example/#run">Example analysis page</a>. For your own bundle, run these from the installed source checkout’s <code>PASSAGE</code> directory:</p>
+<pre><code class="language-bash"># Pathway GP comparison
+Rscript inst/scripts/passage_pathway_cli.R sample.rds pathway_A gp_results \
+  9999 1 pca auto 0.25 false gp lowrank 64
+
+# Fixed-kernel analysis
+Rscript inst/scripts/passage_pathway_cli.R sample.rds pathway_A fixed_results \
+  9999 1 pca auto 0.25 false subspace
+
+# Competitive analysis; pathways.rds is a named list of gene sets
+Rscript inst/scripts/passage_cli.R sample.rds pathways.rds competitive_results 9999 1</code></pre>
+<details><summary>Pathway command argument order</summary>
+<pre><code>BUNDLE PATHWAY OUTPUT B SEED METHOD K RANGE DESCRIPTIVE_GP
+TEST GP_KERNEL FEATURES RANGES FRACTIONS</code></pre>
+<p><code>pca auto</code> keeps 95% of adjusted variance; <code>pca 2</code> fixes two PCs; <code>factor_analysis 2</code> requests two factors. <code>RANGE</code> is used only by the fixed-kernel test, but remains a positional argument for GP runs. <code>DESCRIPTIVE_GP=true</code> additionally runs the separate GpGp fits.</p>
+<p><code>TEST</code> is <code>gp</code> or <code>subspace</code>; omission defaults to <code>subspace</code>. The optional final two arguments are comma-separated range and fraction grids.</p>
+</details>
+<p>Use a new or empty output directory. The pathway CLI checks this; the older competitive CLI does not reject an existing directory. Both record the run settings and write <code>analysis.complete</code> after successful execution.</p>
+<h2 id="results">Find and interpret results</h2>
+<div class="table-wrap"><table><thead><tr><th>Pathway CLI file</th><th>Contents</th></tr></thead><tbody>
+  <tr><td><code>pathway_fit.rds</code></td><td>Estimation object, rank and gene coverage.</td></tr>
+  <tr><td><code>component_scores.csv</code><br><code>component_loadings.csv</code></td><td>Spot-level components and gene contributions.</td></tr>
+  <tr><td><code>pathway_test.rds</code><br><code>pathway_summary.csv</code></td><td>Test object with null draws; summary with <code>p_gp</code> or fixed-test p-values.</td></tr>
+  <tr><td><code>gp_component_fits.csv</code></td><td>Spatial parameter estimates and grid-boundary flags for the GP comparison.</td></tr>
+  <tr><td><code>configuration.rds</code><br><code>sessionInfo.txt</code></td><td>Input checksum, coordinate scaling, settings and R environment.</td></tr>
+</tbody></table></div>
+<p>The competitive CLI writes <code>passage_result.rds</code>, <code>pathways.csv</code> and <code>pathway_coverage.csv</code>, alongside the session record and completion marker. The kidney runner combines routes in a single <a href="{{prefix}}example/#results">summary table</a> and saves their detailed objects.</p>
+<div class="callout caution"><p><strong>Interpretation is part of the workflow.</strong> Single-pathway functions do not adjust across pathways or samples. A completed run demonstrates execution, not calibration. Read the <a href="{{prefix}}methods/#assumptions">current variance assumptions</a>, examine coverage and boundary flags, and record the testing family before drawing biological conclusions.</p></div>
+<p>For argument-level help, use <code>?passage_fit_pathway</code>, <code>?passage_test_pathway_gp</code> and <code>?passage_analyze_bundle</code> in R. The <a href="https://github.com/diptavo/PASSAGE/blob/main/docs/software_guide.md">repository reference</a> also documents the command-line interface.</p>
+<div class="next"><a href="{{prefix}}methods/">← Methods</a><a href="{{prefix}}example/">Next: a complete example →</a></div>

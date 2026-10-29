@@ -8,8 +8,9 @@ estimates pathway activity from covariate-adjusted expression and tests for
 spatial structure. A separate competitive analysis compares a pathway with
 matched gene sets.
 
-- [Methods](docs/method_choices.md): models, hypotheses, calibration and limitations.
-- [Software guide](docs/software_guide.md): input format, R examples, command-line usage and outputs.
+- [Methods](https://diptavo.github.io/PASSAGE/methods/): scientific questions, inference options, intuition and interpretation.
+- [Software guide](https://diptavo.github.io/PASSAGE/software/): installation, input format, R functions and command-line usage.
+- [Example analysis](https://diptavo.github.io/PASSAGE/example/): analyze three pathways in the prepared kidney sample, including competitive testing.
 - [Release notes](NEWS.md)
 
 ## Installation
@@ -49,7 +50,7 @@ execution check. To use more draws and a new output directory:
 Rscript inst/examples/run_kidney.R all 9999 results/kidney_9999
 ```
 
-The [software guide](docs/software_guide.md#kidney-example-estimation-and-both-testing-questions)
+The [example analysis](https://diptavo.github.io/PASSAGE/example/)
 covers installation, running one testing route, PCA versus factor analysis, and
 outputs. [Data provenance and licenses](inst/extdata/kidney_KC2_SOURCE.md) describe
 the preparation and gene-set snapshot. Execution alone does not establish that
@@ -111,7 +112,7 @@ assume independent Gaussian errors across spots with a common gene covariance,
 conditional on a fixed adjustment design. In a small simulation pilot, GP null
 rejection rates were 2.0–4.5% at a nominal 5%, but rose to 14.5–25.0% when noise
 variance varied spatially. A heteroskedasticity correction is not implemented.
-The [methods guide](docs/method_choices.md#validation-and-current-limits)
+The [methods guide](https://diptavo.github.io/PASSAGE/methods/#assumptions)
 describes the pilot and its scope.
 
 Single-pathway p-values need correction across the chosen family of pathways
