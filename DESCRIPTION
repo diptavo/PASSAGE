@@ -27,10 +27,12 @@ Suggests:
     CompQuadForm,
     corpcor,
     fastICA,
+    fields,
     FNN,
     GpGp,
     irlba,
     MASS,
+    RcppEigen,
     RSpectra,
     testthat,
     TMB
