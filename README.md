@@ -22,8 +22,38 @@ packageVersion("PASSAGE")   # 0.5.0
 ```
 
 R 4.1 or later and `Matrix` are required. The pathway PCA, factor-analysis and
-GP comparison functions need no additional packages. `GpGp` is optional and
-is used only by the separate descriptive GP fitting function.
+GP comparison functions need no additional packages. Install `irlba` for fast
+global PCA on the full kidney example. `GpGp` and `fields` are optional and are
+used by the separate descriptive GP fitting function.
+
+## Prepared kidney example
+
+The repository includes KC2: **2,166 spots, all 17,630 prepared genes**, an
+adjustment design, raw counts and three Hallmark pathways: hypoxia,
+angiogenesis and inflammatory response. The full gene background supports
+competitive testing.
+
+After installing PASSAGE and `irlba`, run this from the repository directory:
+
+```bash
+Rscript inst/examples/run_kidney.R
+```
+
+It runs pathway PCA, the GP and fixed-kernel self-contained tests, and competitive
+testing. Results are written to `results/kidney_all/summary.csv`, with fitted
+objects, component scores, loadings and candidate driver genes alongside it.
+The default uses three pathway components and 199 null draws for a quick
+execution check. To use more draws and a new output directory:
+
+```bash
+Rscript inst/examples/run_kidney.R all 9999 results/kidney_9999
+```
+
+The [software guide](docs/software_guide.md#kidney-example-estimation-and-both-testing-questions)
+covers installation, running one testing route, PCA versus factor analysis, and
+outputs. [Data provenance and licenses](inst/extdata/kidney_KC2_SOURCE.md) describe
+the preparation and gene-set snapshot. Execution alone does not establish that
+the statistical assumptions hold in this sample.
 
 ## Analysis choices
 
@@ -91,4 +121,5 @@ downstream analysis.
 
 ## License
 
-MIT. Copyright 2026 Diptavo Dutta.
+Code: MIT. Copyright 2026 Diptavo Dutta. The bundled KC2 data and Hallmark lists
+retain their [CC BY 4.0 source terms](inst/extdata/kidney_KC2_SOURCE.md).

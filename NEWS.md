@@ -1,3 +1,10 @@
+# Development
+
+- Added a complete prepared KC2 example, including the competitive background,
+  three Hallmark pathways and a runner for estimation and both testing questions.
+- Declared optional-engine dependencies needed for GpGp fitting and TMB
+  compilation in clean installations.
+
 # PASSAGE 0.5.0
 
 - Added a pathway GP covariance comparison. The test fits component spatial

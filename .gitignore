@@ -22,6 +22,7 @@ cache/
 tmp/
 *.rds
 *.RDS
+!inst/extdata/kidney_KC2.rds
 *.RData
 *.h5
 *.h5ad

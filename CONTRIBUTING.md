@@ -13,5 +13,8 @@ R CMD build .
 R CMD check --no-manual PASSAGE_*.tar.gz
 ```
 
-Do not commit controlled-access data, identifiable sample metadata, MSigDB
-redistributions, credentials, cluster logs, or generated analysis outputs.
+Do not commit controlled-access data, identifiable sample metadata, credentials,
+cluster logs, or generated analysis outputs. Public example data and gene sets
+must have verified redistribution terms, source attribution, checksums and a
+description of preprocessing. Do not add bulk MSigDB collections or gene sets
+whose licenses do not permit redistribution.

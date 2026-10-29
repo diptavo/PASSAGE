@@ -16,9 +16,144 @@ packageVersion("PASSAGE")
 
 For a source archive, use
 `install.packages("PASSAGE_0.5.0.tar.gz", repos = NULL, type = "source")`.
-The core package requires R >= 4.1 and `Matrix`. Install `GpGp` only if using
-`passage_fit_pathway_gp()`. Other suggested packages support older optional
-engines. Record the package version and `sessionInfo()` with each analysis.
+The core package requires R >= 4.1 and `Matrix`. Install `irlba` for fast global
+PCA with large backgrounds. Descriptive GP fitting needs `GpGp` and `fields`;
+the optional compiled joint-factor engine needs `TMB`, `RcppEigen` and a working
+C++ compiler. Record the package version and `sessionInfo()` with each analysis.
+
+## Kidney example: estimation and both testing questions
+
+The package includes a prepared public KC2 kidney cancer sample with **2,166
+spots and 17,630 genes**. Every prepared gene is retained so that competitive
+tests have a background beyond the target pathways. Coordinates, normalized
+expression, raw counts, QC measurements, reference-informed composition
+estimates and the adjustment design are already aligned.
+
+Three Hallmark sets are included: hypoxia (190 observed genes), angiogenesis
+(32), and inflammatory response (197). Their complete gene lists are retained,
+including genes absent from this expression matrix. See the
+[data provenance and licenses](../inst/extdata/kidney_KC2_SOURCE.md).
+
+### Run from a terminal
+
+Download the repository once and install the package:
+
+```bash
+git clone https://github.com/diptavo/PASSAGE.git
+cd PASSAGE
+Rscript -e 'install.packages(c("remotes", "irlba"), repos="https://cloud.r-project.org")'
+Rscript -e 'remotes::install_local(".", upgrade="never")'
+```
+
+If the repository is already on your computer, enter its `PASSAGE` directory
+and update it with `git pull --ff-only` instead of cloning again. Run all three
+pathways through estimation and testing:
+
+```bash
+Rscript inst/examples/run_kidney.R
+```
+
+This uses three pathway PCs and 199 null draws and writes `results/kidney_all/`.
+The command performs:
+
+1. Covariate-adjusted PCA within each pathway, saving scores and loadings.
+2. A self-contained GP covariance test using those scores, with a shared
+   64-feature kernel cache across pathways.
+3. Fixed-kernel trace and largest-root tests, combined into one corrected
+   omnibus p-value per pathway, as a sensitivity analysis.
+4. Global PCA across all 17,630 genes and competitive testing against unique
+   matched gene sets, excluding the target pathway from its own background.
+
+For more Monte Carlo resolution, use a new output directory:
+
+```bash
+Rscript inst/examples/run_kidney.R all 9999 results/kidney_9999
+```
+
+The `all` command includes every route above. To run only one testing route:
+
+```bash
+Rscript inst/examples/run_kidney.R competitive 9999 results/kidney_competitive
+Rscript inst/examples/run_kidney.R gp 9999 results/kidney_gp
+Rscript inst/examples/run_kidney.R fixed 9999 results/kidney_fixed
+```
+
+The optional final arguments choose the pathway estimation method and rank:
+
+```bash
+Rscript inst/examples/run_kidney.R gp 199 results/kidney_fa factor_analysis 3
+Rscript inst/examples/run_kidney.R gp 199 results/kidney_pca95 pca auto
+```
+
+`pca auto` retains 95% of adjusted pathway variance. The example's default
+`pca 3` is a smaller, prespecified model for a quick run; it tests only the
+retained three-component representation. It does not change the core function's
+95% default. Factor analysis needs a fixed rank. These choices affect the
+pathway-specific route; competitive analysis uses its own global six-factor PCA
+with 20 Vecchia neighbors. The example specifies ranges of 0.05, 0.1, 0.2 and
+0.4 for the GP and competitive routes, and 0.25 for the fixed-kernel route.
+
+### Run from R without a repository checkout
+
+After installing PASSAGE and `irlba`, the same example is available through the
+installed package:
+
+```r
+library(PASSAGE)
+source(system.file("examples", "run_kidney.R", package = "PASSAGE"))
+run_kidney()
+```
+
+Choose a new output directory for another run. The R entry point also exposes
+the kernel feature count and optional descriptive GpGp fits:
+
+```r
+run_kidney(mode = "gp", B = 199, n_features = 128,
+           output = "results/kidney_gp128")
+
+# Optional descriptive fits; the GP test itself does not need these packages.
+install.packages(c("GpGp", "fields"))
+run_kidney(mode = "gp", B = 199, descriptive_gp = TRUE,
+           output = "results/kidney_descriptive")
+```
+
+To inspect the data or use the individual functions below:
+
+```r
+b <- passage_validate_bundle(system.file("extdata", "kidney_KC2.rds", package = "PASSAGE"))
+dim(b$Y)
+names(b$pathway_sets)
+colnames(b$X)
+```
+
+### Read the results
+
+`summary.csv` has one row per pathway and test: nine rows for `all`. It records
+the raw p-value, BH/BY adjustments across the three pathways within each test,
+and BH/BY adjustments across all nine reported pathway-test hypotheses. Select
+the testing family before interpreting results. The GP test is the example's
+primary self-contained test; the fixed-kernel result is a sensitivity analysis.
+Competitive testing answers a different question.
+
+Each pathway directory contains the fitted components, score/loadings tables,
+and test objects. `competitive_summary.csv` contains competitive p-values,
+effect-size and coherence summaries, and candidate driver genes;
+`competitive_result.rds` also retains matched-null results. The top-level
+configuration records the input checksum, design, coordinate scaling, settings
+and runtime. `sessionInfo.txt` records the R environment, and `analysis.complete`
+is written only after every requested step succeeds. Existing nonempty output
+directories are rejected to protect earlier results.
+
+The 199-draw run checks execution; it has a raw Monte Carlo p-value floor of
+0.005. Increasing to 9,999 draws improves that floor to 0.0001. The fixed-test
+omnibus has twice that floor because it corrects over two statistics. More
+draws do not fix model assumptions.
+The Gaussian-reference tests remain sensitive to spatially varying noise
+variance. Composition covariates here were estimated from the same counts and
+are treated as fixed, without propagating their uncertainty. Review QC,
+calibration and replication before making biological claims. This example
+covers spatial estimation and testing; GWAS integration still requires separate
+GWAS statistics, gene mapping and appropriate LD information.
 
 ## Prepare an input bundle
 
@@ -139,7 +274,7 @@ cause an error.
 ### Optional descriptive GP fits
 
 ```r
-install.packages("GpGp")  # once, if this option is needed
+install.packages(c("GpGp", "fields"))  # once, if this option is needed
 descriptive <- passage_fit_pathway_gp(fit, xy)
 descriptive$summary
 ```
@@ -173,23 +308,18 @@ their own background.
 
 ## Command line
 
-Locate the installed pathway program:
+From the repository's `PASSAGE` directory after installing the package, run a
+pathway GP comparison using a pathway name present in your bundle:
 
 ```bash
-PASSAGE_CLI=$(Rscript -e 'cat(system.file("scripts", "passage_pathway_cli.R", package="PASSAGE"))')
-```
-
-Run a pathway GP comparison, using a pathway name present in the bundle:
-
-```bash
-Rscript "$PASSAGE_CLI" sample.rds pathway_A gp_results \
+Rscript inst/scripts/passage_pathway_cli.R sample.rds pathway_A gp_results \
   9999 1 pca auto 0.25 false gp lowrank 64
 ```
 
 For the fixed-kernel route:
 
 ```bash
-Rscript "$PASSAGE_CLI" sample.rds pathway_A fixed_results \
+Rscript inst/scripts/passage_pathway_cli.R sample.rds pathway_A fixed_results \
   9999 1 pca auto 0.25 false subspace
 ```
 
@@ -215,8 +345,7 @@ competitive CLI takes a bundle and a separate RDS containing a named list of
 gene sets:
 
 ```bash
-PASSAGE_COMPETITIVE_CLI=$(Rscript -e 'cat(system.file("scripts", "passage_cli.R", package="PASSAGE"))')
-Rscript "$PASSAGE_COMPETITIVE_CLI" sample.rds pathways.rds competitive_results 9999 1
+Rscript inst/scripts/passage_cli.R sample.rds pathways.rds competitive_results 9999 1
 ```
 
 Use a fresh directory for competitive results as well; that older CLI does not
