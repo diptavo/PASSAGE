@@ -9,6 +9,7 @@ from urllib.parse import unquote, urlsplit
 
 ROOT = Path(__file__).resolve().parent
 OUTPUT = ROOT / "_build"
+VERSION = re.search(r"^Version:\s*(\S+)", (ROOT.parent / "DESCRIPTION").read_text(), re.M).group(1)
 PAGES = {
     "index": ("PASSAGE", "Spatial pathway analysis, from the scientific question to an interpretable result."),
     "methods": ("Methods", "The questions, estimation choices and inference behind PASSAGE."),
@@ -50,6 +51,7 @@ def build():
         ) for key, label in (("methods", "Methods"), ("software", "Software guide"), ("example", "Example analysis")))
         values = {"title": title, "description": escape(description), "body": body,
                   "nav": nav, "toc": toc, "prefix": prefix,
+                  "version": VERSION,
                   "route": "" if slug == "index" else slug + "/"}
         rendered = template
         for key, value in values.items():

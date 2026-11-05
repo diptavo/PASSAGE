@@ -169,14 +169,19 @@ passage_prepare_gp_kernel <- function(coords, X = NULL,
   A %*% backsolve(upper, gram_chol)
 }
 
-passage_test_pathway_gp <- function(fit, coords = NULL, kernel_cache = NULL,
-                                    ranges = c(0.05, 0.1, 0.2, 0.4),
-                                    fractions = c(0, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.97),
-                                    B = 999L, seed = 1L,
-                                    kernel_method = c("lowrank", "dense"),
-                                    n_features = 64L, max_dense_n = 1000L,
-                                    batch_size = 64L, keep_null = TRUE) {
-  started <- proc.time()[[3L]]
+# Aggregation is identical for the observed pathway and every null draw. Top-k
+# selects contributions, not a data-dependent value of k; its prespecified cap
+# also permits pathway PCA to retain fewer than top_k components.
+.passage_gp_aggregate <- function(values, aggregation, top_k) {
+  values <- as.matrix(values)
+  if (aggregation == "sum") return(colSums(values))
+  if (aggregation == "max") return(apply(values, 2L, max))
+  k <- min(top_k, nrow(values))
+  vapply(seq_len(ncol(values)), function(j)
+    sum(sort(values[, j], decreasing = TRUE)[seq_len(k)]), numeric(1L))
+}
+
+.passage_gp_fit_scores <- function(fit) {
   if (!inherits(fit, "passage_pathway_fit") ||
       !identical(fit$estimation_scope, "pathway_only") ||
       !identical(fit$scores_source, "unsmoothed_expression") ||
@@ -185,14 +190,95 @@ passage_test_pathway_gp <- function(fit, coords = NULL, kernel_cache = NULL,
   scores <- as.matrix(fit$scores)
   if (!is.numeric(scores) || any(!is.finite(scores)) || ncol(scores) != fit$K)
     stop("fit has invalid scores")
-  B <- .passage_gp_integer(B, "B")
-  seed <- .passage_gp_integer(seed, "seed", 0L)
-  batch_size <- .passage_gp_integer(batch_size, "batch_size")
-  if (!is.logical(keep_null) || length(keep_null) != 1L || is.na(keep_null)) stop("keep_null must be TRUE or FALSE")
+  scores
+}
+
+.passage_gp_score_context <- function(fit, cache, fractions) {
+  scores <- .passage_gp_fit_scores(fit)
+  if (!inherits(cache, "passage_gp_kernel") || !identical(cache$cache_version, 1L))
+    stop("invalid kernel_cache")
   if (!is.numeric(fractions) || !length(fractions) || any(!is.finite(fractions)) ||
       any(fractions < 0 | fractions >= 1) || !any(fractions == 0) || anyDuplicated(fractions))
     stop("fractions must be distinct numbers in [0,1), including 0")
   fractions <- sort(as.numeric(fractions))
+  if (!identical(rownames(scores), rownames(cache$coords)) ||
+      !isTRUE(all.equal(fit$X, cache$X, check.attributes = TRUE)))
+    stop("kernel_cache coordinates/design must exactly match the fitted pathway")
+  K <- ncol(scores)
+  if (K < 1L || K >= cache$df || qr(scores)$rank != K)
+    stop("scores need full column rank below residual df")
+  scores <- qr.resid(qr(cache$X), scores)
+  total <- colSums(scores^2)
+  if (any(total <= 0)) stop("zero residual component variance")
+  # Unit-norm scores improve conditioning without changing any component LR.
+  standardized <- sweep(scores, 2L, sqrt(total), "/")
+  gram_chol <- tryCatch(chol(crossprod(standardized)), error = function(e)
+    stop("score Gram is numerically singular"))
+  list(scores = scores, standardized = standardized, gram_chol = gram_chol,
+       total = total, fractions = fractions, K = K, residual_df = cache$df)
+}
+
+.passage_gp_observed <- function(fit, cache, context, aggregation, top_k) {
+  projection <- crossprod(cache$projection_transform,
+                          crossprod(cache$basis, context$standardized))
+  observed <- .passage_gp_profile(projection^2, rep(1, context$K), cache,
+                                  context$fractions)
+  statistic <- unname(.passage_gp_aggregate(observed$statistic, aggregation, top_k)[1L])
+  component_fits <- observed$fits
+  for (nm in c("total_variance", "spatial_variance", "noise_variance"))
+    component_fits[[nm]] <- component_fits[[nm]] * context$total
+  component_fits <- cbind(component = colnames(context$scores), component_fits,
+                          stringsAsFactors = FALSE)
+  component_fits$selected <- TRUE
+  if (aggregation != "sum") {
+    n_selected <- if (aggregation == "max") 1L else min(top_k, context$K)
+    selected <- order(component_fits$statistic, decreasing = TRUE)[seq_len(n_selected)]
+    component_fits$selected <- seq_len(context$K) %in% selected
+  }
+  list(statistic = statistic, component_fits = component_fits,
+       aggregation = aggregation,
+       top_k = if (aggregation == "topk") top_k else NULL,
+       top_k_used = if (aggregation == "topk") min(top_k, context$K) else NULL,
+       K = context$K, residual_df = context$residual_df,
+       ranges = cache$ranges, fractions = context$fractions,
+       estimation = list(method = fit$method, scope = fit$estimation_scope,
+         K = context$K, rank_rule = fit$rank_rule,
+         explained_variance = fit$explained_variance, gene_names = fit$gene_names),
+       interpretation = "uncalibrated GP profile statistic; larger values indicate more spatial evidence; a separate null comparison is required")
+}
+
+# Pure observed-statistic calculation: no random draws or p-value calculation.
+# A competitive caller must refit pathway estimation for each background set.
+passage_pathway_gp_statistic <- function(fit, kernel_cache,
+                                        fractions = c(0, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.97),
+                                        aggregation = c("sum", "max", "topk"),
+                                        top_k = 2L,
+                                        output = c("statistic", "details")) {
+  aggregation <- match.arg(aggregation)
+  output <- match.arg(output)
+  top_k <- .passage_gp_integer(top_k, "top_k")
+  context <- .passage_gp_score_context(fit, kernel_cache, fractions)
+  observed <- .passage_gp_observed(fit, kernel_cache, context, aggregation, top_k)
+  if (output == "statistic") observed$statistic else observed
+}
+
+passage_test_pathway_gp <- function(fit, coords = NULL, kernel_cache = NULL,
+                                    ranges = c(0.05, 0.1, 0.2, 0.4),
+                                    fractions = c(0, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.97),
+                                    B = 999L, seed = 1L,
+                                    kernel_method = c("lowrank", "dense"),
+                                    n_features = 64L, max_dense_n = 1000L,
+                                    batch_size = 64L, keep_null = TRUE,
+                                    aggregation = c("sum", "max", "topk"),
+                                    top_k = 2L) {
+  started <- proc.time()[[3L]]
+  aggregation <- match.arg(aggregation)
+  top_k <- .passage_gp_integer(top_k, "top_k")
+  scores <- .passage_gp_fit_scores(fit)
+  B <- .passage_gp_integer(B, "B")
+  seed <- .passage_gp_integer(seed, "seed", 0L)
+  batch_size <- .passage_gp_integer(batch_size, "batch_size")
+  if (!is.logical(keep_null) || length(keep_null) != 1L || is.na(keep_null)) stop("keep_null must be TRUE or FALSE")
   if (is.null(kernel_cache)) {
     if (is.null(coords)) stop("supply coords or a prepared kernel_cache")
     if (is.null(rownames(coords))) rownames(coords) <- rownames(scores)
@@ -211,22 +297,13 @@ passage_test_pathway_gp <- function(fit, coords = NULL, kernel_cache = NULL,
       stop("n_features conflicts with kernel_cache")
   }
   cache <- kernel_cache
-  if (!identical(rownames(scores), rownames(cache$coords)) ||
-      !isTRUE(all.equal(fit$X, cache$X, check.attributes = TRUE)))
-    stop("kernel_cache coordinates/design must exactly match the fitted pathway")
-  K <- ncol(scores)
+  context <- .passage_gp_score_context(fit, cache, fractions)
+  fractions <- context$fractions
+  K <- context$K
   df <- cache$df
-  if (K < 1L || K >= df || qr(scores)$rank != K) stop("scores need full column rank below residual df")
-  scores <- qr.resid(qr(cache$X), scores)
-  total <- colSums(scores^2)
-  if (any(total <= 0)) stop("zero residual component variance")
-  # Unit-norm scores improve conditioning without changing any component LR.
-  standardized <- sweep(scores, 2L, sqrt(total), "/")
-  gram_chol <- tryCatch(chol(crossprod(standardized)), error = function(e)
-    stop("score Gram is numerically singular"))
-  projection <- crossprod(cache$projection_transform, crossprod(cache$basis, standardized))
-  observed <- .passage_gp_profile(projection^2, rep(1, K), cache, fractions)
-  statistic <- sum(observed$statistic)
+  gram_chol <- context$gram_chol
+  observed <- .passage_gp_observed(fit, cache, context, aggregation, top_k)
+  statistic <- observed$statistic
   old <- if (exists(".Random.seed", .GlobalEnv, inherits = FALSE)) get(".Random.seed", .GlobalEnv) else NULL
   on.exit(if (is.null(old)) {
     if (exists(".Random.seed", .GlobalEnv, inherits = FALSE)) rm(".Random.seed", envir = .GlobalEnv)
@@ -241,29 +318,28 @@ passage_test_pathway_gp <- function(fit, coords = NULL, kernel_cache = NULL,
       .passage_gp_rotation(ncol(cache$basis), df, gram_chol)
     pp <- crossprod(cache$projection_transform, orientations)
     values <- .passage_gp_profile(pp^2, rep(1, K * nb), cache, fractions)$statistic
-    null[start + seq_len(nb) - 1L] <- colSums(matrix(values, K, nb))
+    null[start + seq_len(nb) - 1L] <- .passage_gp_aggregate(matrix(values, K, nb), aggregation, top_k)
   }
   # A numerical tolerance counts near-ties conservatively.
   exceedances <- sum(null >= statistic - 1e-10 * max(1, abs(statistic)))
-  component_fits <- observed$fits
-  for (nm in c("total_variance", "spatial_variance", "noise_variance"))
-    component_fits[[nm]] <- component_fits[[nm]] * total
-  component_fits <- cbind(component = colnames(scores), component_fits, stringsAsFactors = FALSE)
   list(statistic = statistic, p = (1 + exceedances) / (B + 1),
-    component_fits = component_fits, null = if (keep_null) null else NULL,
+    component_fits = observed$component_fits, null = if (keep_null) null else NULL,
+    aggregation = aggregation, top_k = observed$top_k, top_k_used = observed$top_k_used,
     B = B, seed = seed, K = K, residual_df = df, exceedances = exceedances,
     mc_floor = 1 / (B + 1), method = "gp_profile_rotation",
-    calibration = "conditional Gaussian rotation; complete score Gram preserved; range/fraction reselected in every null draw",
+    calibration = "conditional Gaussian rotation; complete score Gram preserved; range/fraction and component selection repeated in every null draw",
     null_assumption = "iid Gaussian residual rows conditional on fixed design, with arbitrary gene covariance; covariance-only pathway PCA/FA selection",
     role = "self-contained test of spatial covariance in the retained pathway components; not competitive",
     estimation = list(method = fit$method, scope = fit$estimation_scope, K = K,
-      rank_rule = fit$rank_rule, gene_names = fit$gene_names),
+      rank_rule = fit$rank_rule, explained_variance = fit$explained_variance,
+      gene_names = fit$gene_names),
     configuration = list(ranges = cache$ranges, fractions = fractions,
       kernel_method = cache$kernel_method, n_features_requested = cache$n_features,
       landmarks_used = length(cache$landmarks), kernel_ranks = lengths(lapply(cache$kernels, `[[`, "lambda")),
       union_rank = ncol(cache$basis), normalization = cache$normalization,
       batch_size = batch_size, coordinates = "supplied units; no automatic rescaling",
-      statistic = "sum of per-component twice-profile-restricted-loglikelihood improvements; not a full joint FA likelihood"),
+      aggregation = aggregation, top_k = observed$top_k, top_k_used = observed$top_k_used,
+      statistic = paste0(aggregation, " aggregation of per-component twice-profile-restricted-loglikelihood improvements; not a full joint FA likelihood")),
     timing = c(total_seconds = proc.time()[[3L]] - started,
       calibration_seconds = proc.time()[[3L]] - calibration_started,
       kernel_preparation_seconds = cache$preparation_seconds),

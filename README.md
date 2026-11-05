@@ -8,9 +8,12 @@ estimates pathway activity from covariate-adjusted expression and tests for
 spatial structure. A separate competitive analysis compares a pathway with
 matched gene sets.
 
+Current version: **0.6.1**.
+
 - [Methods](https://diptavo.github.io/PASSAGE/methods/): scientific questions, inference options, intuition and interpretation.
 - [Software guide](https://diptavo.github.io/PASSAGE/software/): installation, input format, R functions and command-line usage.
 - [Example analysis](https://diptavo.github.io/PASSAGE/example/): analyze three pathways in the prepared kidney sample, including competitive testing.
+- [Interchangeable competitive statistics](docs/competitive_interface.md): global or pathway-local estimation, custom statistics, calibrated combinations, matching diagnostics, and interactive R examples.
 - [Release notes](NEWS.md)
 
 ## Installation
@@ -19,7 +22,7 @@ matched gene sets.
 install.packages("remotes")  # if needed
 remotes::install_github("diptavo/PASSAGE")
 library(PASSAGE)
-packageVersion("PASSAGE")   # 0.5.0
+packageVersion("PASSAGE")
 ```
 
 R 4.1 or later and `Matrix` are required. The pathway PCA, factor-analysis and
@@ -62,11 +65,43 @@ the statistical assumptions hold in this sample.
 |---|---|---|
 | Does spatial covariance improve the model of pathway activity? | PCA or factor analysis within the pathway, followed by component GP fitting | `passage_test_pathway_gp()` |
 | Is pathway activity aligned with a prespecified spatial kernel? | PCA or factor analysis within the pathway | `passage_test_pathway_fit()` |
-| Is a pathway more spatially structured than comparable gene sets? | Global factor model across the supplied gene universe | `passage_analyze_bundle()` |
+| Does a pathway score more highly than comparable gene sets? | Global factors, pathway-local PCA/FA, or a custom representation | `passage_competitive_test()`; `passage_analyze_bundle()` for multiple pathways |
 
 The first two tests use unsmoothed component scores. The GP comparison fits
 spatial variance fractions and ranges and includes their likelihood improvement
 in the test statistic. Its null calibration repeats that parameter search.
+
+## Interchangeable competitive statistics
+
+Version 0.6.0 separates statistic calculation from competitive testing. Given
+expression `Y`, aligned `coords`, and a vector of pathway gene names `pathway`:
+
+```r
+bins <- passage_make_gene_bins(Y, n_mean_bins = 3,
+                              n_detect_bins = 2, n_var_bins = 2)
+passage_matching_diagnostics(pathway, bins)$supported
+engine <- passage_fit_engine_pca(Y, coords, K = 6)
+statistic <- passage_make_statistic(
+  engine, Y, gene_bins = bins,
+  statistics = c("score_z", "score_activity_hotspot", "score_sparse_topk_z")
+)
+result <- passage_competitive_test(
+  pathway, statistic, gene_bins = bins, B = 999, seed = 1,
+  combine = "cauchy"
+)
+result$components
+result$combinations
+```
+
+The 17 existing competitive statistics and the fitted-correlation statistic
+are available through one factory. A custom function of gene indices can use
+the same testing procedure. `passage_make_local_gp_statistic()` supplies local
+PCA/FA statistics with `sum`, `max`, or `topk` component aggregation, refitting
+every matched set. Cauchy, minimum-p, and Fisher combinations are calibrated
+against shared matched sets, without independent-p approximations. Prespecify
+the statistic panel and primary combiner. The
+[complete small-data example](docs/competitive_interface.md) also explains
+nuisance covariates, rank sensitivity, Monte Carlo uncertainty, and outputs.
 
 ## Quick example
 
@@ -107,11 +142,21 @@ the results.
 
 ## Interpretation
 
-Version 0.5.0 provides Gaussian-reference research methods. The pathway tests
+PASSAGE provides research methods. The Gaussian rotation and fixed-kernel tests
 assume independent Gaussian errors across spots with a common gene covariance,
 conditional on a fixed adjustment design. In a small simulation pilot, GP null
 rejection rates were 2.0–4.5% at a nominal 5%, but rose to 14.5–25.0% when noise
-variance varied spatially. A heteroskedasticity correction is not implemented.
+variance varied spatially. Version 0.6.1 adds a separate, approximate
+`passage_test_pathway_gp_wild()` option that preserves spot-specific residual
+magnitudes and refits pathway estimation in each bootstrap draw. The original
+Gaussian rotation test retains its common-variance assumption.
+The new competitive interface also requires study-specific calibration;
+interchangeable statistics and empirical combinations do not remove matching
+assumptions or establish universal calibration.
+For the conditional uniform-gene-label null, use `reference = "universe"`
+in competitive testing. Use measured covariates, or prespecified negative
+controls through `passage_prepare_nuisance()`, to address nuisance variation.
+See the [calibration guide](docs/robust_calibration.md) for assumptions and examples.
 The [methods guide](https://diptavo.github.io/PASSAGE/methods/#assumptions)
 describes the pilot and its scope.
 

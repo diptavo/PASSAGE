@@ -1,0 +1,9 @@
+"scenario","expected","found","common_valid","unavailable","missing"
+"null_iid",200,200,190,10,0
+"null_spatial",200,200,185,15,0
+"null_hetero",200,200,195,5,0
+"null_nuisance",200,200,193,7,0
+"dense",100,100,96,4,0
+"sparse",100,100,93,7,0
+"opposing",100,100,95,5,0
+"nuisance_dense",100,100,100,0,0

@@ -15,7 +15,7 @@ packageVersion("PASSAGE")
 ```
 
 For a source archive, use
-`install.packages("PASSAGE_0.5.0.tar.gz", repos = NULL, type = "source")`.
+`install.packages("PASSAGE_0.6.1.tar.gz", repos = NULL, type = "source")`.
 The core package requires R >= 4.1 and `Matrix`. Install `irlba` for fast global
 PCA with large backgrounds. Descriptive GP fitting needs `GpGp` and `fields`;
 the optional compiled joint-factor engine needs `TMB`, `RcppEigen` and a working
@@ -294,7 +294,7 @@ saveRDS(competitive, "competitive_result.rds")
 ```
 
 The bundle must include the background gene universe, not just the tested
-pathway. This route uses a global PCA engine and unique matched comparison
+pathway. By default this route uses a global PCA engine and unique matched comparison
 sets. The main result fields are `p_competitive`, `q_BH`, `q_BY`, `score_excess`
 and `candidate_drivers`. Adjustments cover eligible pathways in that call; if
 the family includes several samples, collect and adjust the relevant p-values
@@ -303,8 +303,60 @@ together.
 If matching fails, inspect background coverage and the strata before changing
 the matching design. To supply bins, pass a `gene_bins` data frame with `gene`
 and `bin`, plus an optional `module`. Its rows must exactly follow the
-nonconstant expression columns. Do not silently include the tested genes in
-their own background.
+nonconstant expression columns. The default `reference = "complement"` excludes
+target genes. Explicit `reference = "universe"` permits target overlap under
+the conditional full-universe gene-label null; preserve that choice when
+reusing matched sets.
+
+### New options in 0.6.1
+
+The R API exposes full-universe references, interchangeable global statistics,
+pathway-local competitive GP scores and empirical combinations:
+
+```r
+panel <- passage_analyze_bundle(
+  b, B = 999, seed = 1, reference = "universe",
+  statistics = c("score_z", "score_activity_hotspot", "score_sparse_topk_z"),
+  combine = "minp"
+)
+panel$tests
+
+local <- passage_analyze_bundle(
+  b, B = 999, seed = 1, reference = "universe",
+  estimation = "pathway", local_method = "pca", local_K = 3,
+  gp_aggregations = c("sum", "max"), combine = "minp"
+)
+local$tests
+```
+
+Local estimation is refitted for every matched set. Global covariance and
+candidate-driver summaries are not populated for local fits. BH/BY adjustments
+in `tests` are across pathways within each named test, not selection across
+statistics/combiners. The [competitive guide](competitive_interface.md) lists
+all statistics and explains custom callbacks and diagnostics.
+
+For self-contained inference with approximate unequal-noise calibration, use
+expression rather than only a saved fit, because every bootstrap draw refits
+pathway estimation:
+
+```r
+wild <- passage_test_pathway_gp_wild(
+  b$Y, b$pathway_sets[[pathway]], coords = xy, X = b$X,
+  K = 2, B = 999, seed = 1
+)
+wild$p
+wild$max_leverage
+```
+
+Both GP calibration functions accept `aggregation = "sum"`, `"max"` or
+`"topk"`, with a prespecified `top_k`. The wild option assumes independent
+spot errors and a suitable mean model and is not an exact finite-sample test.
+See the [calibration guide](robust_calibration.md) for limitations, negative
+controls through `passage_prepare_nuisance()`, and the completed validation.
+
+The existing command-line programs and kidney runner retain Gaussian rotations
+and global `score_z` complement references. Select these newer options through
+the R API.
 
 ## Command line
 
@@ -383,7 +435,7 @@ From a source checkout:
 
 ```bash
 R CMD build .
-R CMD check --no-manual PASSAGE_0.5.0.tar.gz
+R CMD check --no-manual PASSAGE_0.6.1.tar.gz
 ```
 
 The test suite covers factor reconstruction, matched-set sampling, input

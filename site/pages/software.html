@@ -91,6 +91,19 @@ test &lt;- passage_test_pathway_gp(
   fit, kernel_cache = cache, B = 9999, seed = 1
 )</code></pre>
 <p>Reuse a cache only for the same spots, order and adjustment design. Cache settings govern the test; conflicting explicit settings produce an error.</p>
+<h3>Choose component aggregation or unequal-noise calibration</h3>
+<p>The Gaussian rotation test accepts <code>aggregation = "sum"</code> (default), <code>"max"</code> or <code>"topk"</code>, with <code>top_k</code> specifying the last option’s count. The selected aggregation is repeated in every reference draw.</p>
+<p>For the approximate wild-bootstrap alternative, supply expression and the pathway so estimation can be refitted for every draw:</p>
+<pre><code class="language-r">wild &lt;- passage_test_pathway_gp_wild(
+  b$Y, b$pathway_sets[["pathway_A"]], coords = xy, X = b$X,
+  method = "pca", K = 2, aggregation = "sum",
+  ranges = c(0.05, 0.1, 0.2, 0.4), n_features = 64,
+  B = 9999, seed = 1
+)
+wild$p
+wild$max_leverage
+wild$component_fits</code></pre>
+<p>This retains spot-specific residual magnitudes with HC2 leverage adjustment. It requires independent spot errors and a suitable mean model, and does not provide exact finite-sample guarantees. Refitting every draw costs more than the conditional rotation procedure. See the <a href="https://github.com/diptavo/PASSAGE/blob/main/docs/robust_calibration.md">calibration guide</a> for assumptions and validation.</p>
 <h2 id="fixed">Run the fixed-kernel alternative</h2>
 <pre><code class="language-r">fixed &lt;- passage_test_pathway_fit(
   fit, coords = xy, kernel_range = 0.25,
@@ -101,13 +114,43 @@ fixed$p_omnibus_bonferroni</code></pre>
 <p>This tests trace and largest-root alignment at a prespecified spatial range. The omnibus corrects over those two statistics only. This dense implementation has a default 3,000-spot limit and does not silently subset the data. If also running the GP comparison, decide which is primary before inspecting results.</p>
 <h2 id="competitive">Run competitive analysis</h2>
 <pre><code class="language-r">b &lt;- passage_validate_bundle("sample.rds")
-competitive &lt;- passage_analyze_bundle(b, B = 9999, seed = 1)
+competitive &lt;- passage_analyze_bundle(
+  b, B = 9999, seed = 1, reference = "universe"
+)
 competitive$summary
 competitive$coverage
 saveRDS(competitive, "competitive_result.rds")</code></pre>
-<p>This route fits global PCA across the supplied gene universe, with defaults of six factors and 20 Vecchia neighbors. It compares pathways with matched sets drawn from the background. Retaining only the target genes in <code>Y</code> would remove that background.</p>
-<p>The main summary fields include <code>p_competitive</code>, <code>q_BH</code>, <code>q_BY</code>, <code>score_excess</code> and <code>candidate_drivers</code>. BH/BY adjustments cover the eligible pathways in that call. If several samples belong to the same testing family, collect and adjust the relevant p-values together.</p>
+<p>This explicitly chooses full-universe randomization, allowing target overlap under the conditional gene-label null. Omitting <code>reference</code> retains the earlier <code>"complement"</code> default, which excludes target genes. The default estimator remains global PCA with six factors and 20 Vecchia neighbors. Keep a broad eligible gene universe in <code>Y</code>.</p>
+<p>The main summary fields include <code>p_competitive</code>, <code>q_BH</code>, <code>q_BY</code>, <code>score_excess</code> and <code>candidate_drivers</code>. <code>competitive$tests</code> includes every requested statistic and combination. BH/BY adjustments cover pathways within each named test, not selection across tests or combiners. Define a larger family if multiple samples or test choices belong to the same claim.</p>
 <p>If matching fails, inspect coverage and the matching strata. Custom <code>gene_bins</code> must contain <code>gene</code> and <code>bin</code>, with optional <code>module</code>, in exactly the order of the nonconstant expression columns. Do not replace a failed matched comparison with an unmatched result without redefining the analysis.</p>
+<h3>Choose global statistics or pathway-local estimation</h3>
+<pre><code class="language-r"># Global loading, directional activity and sparse-gene evidence
+panel &lt;- passage_analyze_bundle(
+  b, B = 999, seed = 1, reference = "universe",
+  statistics = c("score_z", "score_activity_hotspot", "score_sparse_topk_z"),
+  combine = "minp"
+)
+panel$tests
+
+# Refit pathway PCA and GP statistics for every matched set
+local &lt;- passage_analyze_bundle(
+  b, B = 999, seed = 1, reference = "universe",
+  estimation = "pathway", local_method = "pca", local_K = 3,
+  gp_aggregations = c("sum", "max"), combine = "minp"
+)
+local$tests</code></pre>
+<p>For factor analysis use <code>local_method = "factor_analysis"</code> and an identifiable fixed <code>local_K</code>. Global rank options include <code>rank_method = "variance"</code>, <code>variance_threshold</code>, <code>max_K</code>, and a prespecified <code>rank_grid</code> for fixed-rank sensitivity panels. Inspect <code>competitive$estimation</code> for the fitted ranks and diagnostics. Candidate drivers and global covariance metrics are supplied for global fits; they are not populated for pathway-local fits.</p>
+<p><code>combine</code> can be <code>"none"</code>, <code>"minp"</code>, <code>"cauchy"</code> or <code>"fisher"</code>. Combinations use empirical calibration on shared reference sets. The first requested combination, or otherwise first statistic, defines the bundle’s primary summary. Prespecify that ordering.</p>
+<p>For custom statistics, use <code>passage_competitive_test()</code> with a deterministic function of gene indices. <code>passage_make_statistic()</code> supplies global statistics and <code>passage_make_local_gp_statistic()</code> supplies local ones. The <a href="https://github.com/diptavo/PASSAGE/blob/main/docs/competitive_interface.md">complete interface guide</a> lists all 18 global choices and explains matching diagnostics, custom callbacks and Monte Carlo intervals.</p>
+<h3>Add prespecified nuisance controls</h3>
+<pre><code class="language-r">adjustment &lt;- passage_prepare_nuisance(
+  b$Y, X = b$X, control_genes = negative_controls, n_factors = 2
+)
+adjustment$diagnostics
+b$X &lt;- adjustment$X
+b$Y &lt;- b$Y[, adjustment$analysis_genes, drop = FALSE]
+# Rebuild the estimation and matching with this adjusted bundle.</code></pre>
+<p><code>negative_controls</code> must be a prespecified vector of defensible control-gene names. The helper cannot identify valid biological controls for you. Controls are excluded from the returned analysis universe; treating their estimated PCs as fixed does not propagate their uncertainty.</p>
 <h2 id="optional">Optional descriptive fits</h2>
 <pre><code class="language-r">install.packages(c("GpGp", "fields"))
 descriptive &lt;- passage_fit_pathway_gp(fit, xy)
@@ -115,7 +158,7 @@ descriptive$summary</code></pre>
 <p>This reports component covariance estimates and convergence from GpGp. It does not return a spatial-test p-value or provide inputs to the tests above. The main GP comparison fits its own parameters.</p>
 <p>Advanced fitting engines are described in the <a href="{{prefix}}methods/#other-engines">Methods page</a>. They use <code>passage_fit_factor_engine()</code> or the separate <code>passage_fit_joint_factor_tmb()</code> interface. They require a custom lower-level workflow, and coordinate-informed scores need their own inferential calibration.</p>
 <h2 id="cli">Use the command line</h2>
-<p>For the bundled dataset, use the short commands on the <a href="{{prefix}}example/#run">Example analysis page</a>. For your own bundle, run these from the installed source checkout’s <code>PASSAGE</code> directory:</p>
+<p>For the bundled dataset, use the short commands on the <a href="{{prefix}}example/#run">Example analysis page</a>. Those commands retain their established defaults: Gaussian rotations for the GP test and global <code>score_z</code> with complement references for competitive analysis. Use the R functions above to select wild refitting, full-universe references, local competitive estimation or statistic panels. For your own bundle, run these legacy commands from the installed source checkout’s <code>PASSAGE</code> directory:</p>
 <pre><code class="language-bash"># Pathway GP comparison
 Rscript inst/scripts/passage_pathway_cli.R sample.rds pathway_A gp_results \
   9999 1 pca auto 0.25 false gp lowrank 64

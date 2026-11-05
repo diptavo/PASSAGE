@@ -181,6 +181,12 @@ passage_fit_engine_pathway_holdout <- function(Y,
   out$D <- stats::setNames(fit$D, colnames(Y))
   out$residuals <- R_full
   out$fitted_spatial <- fit$fitted_spatial
+  # The final loading refit uses all genes in unscaled residual units. The
+  # background engine's shorter preprocessing vectors no longer describe it.
+  out$center <- FALSE
+  out$scale <- FALSE
+  out$gene_center <- rep(0, ncol(Y))
+  out$gene_scale <- rep(1, ncol(Y))
   out$gene_names <- colnames(Y)
   out$G <- ncol(Y)
   out$anti_dip <- "pathway_holdout"

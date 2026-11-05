@@ -4,6 +4,7 @@ The site at https://diptavo.github.io/PASSAGE/ is built from the HTML fragments
 in `pages/`, a shared template and local CSS/JavaScript assets. It has no runtime
 dependencies or external fonts. Statistical details remain in `docs/`; the
 website provides an accessible methods overview and a practical software guide.
+The displayed package version is read from `DESCRIPTION` during the build.
 
 Build from the repository root with Python 3.9 or later:
 

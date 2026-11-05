@@ -54,6 +54,7 @@ Rscript inst/examples/run_kidney.R gp 199 results/kidney_pca95 pca auto</code></
   <tr><td>Competitive fit</td><td>Global PCA, 6 factors, 20 neighbors</td><td>Its own estimation workflow, with the same four candidate ranges. Pathway <code>METHOD</code> and <code>K</code> arguments do not change it.</td></tr>
 </tbody></table></div>
 <p>The argument order is <code>MODE B OUTPUT METHOD K</code>. Modes are <code>all</code>, <code>gp</code>, <code>fixed</code> and <code>competitive</code>. Output directories must be new or empty, so repeated runs do not overwrite previous results.</p>
+<p>The runner retains Gaussian rotation calibration and the target-excluded competitive reference for continuity. Version 0.6.1’s wild-bootstrap and full-universe options are selected through the R API, rather than additional positional arguments.</p>
 <h2 id="from-r">Run from R</h2>
 <p>After <a href="{{prefix}}software/#install">installing PASSAGE and irlba</a>, the installed package also provides the same runner. A repository checkout is unnecessary:</p>
 <pre><code class="language-r">library(PASSAGE)
@@ -70,6 +71,13 @@ run_kidney(mode = "gp", B = 199, n_features = 128,
 dim(b$Y)
 names(b$pathway_sets)
 colnames(b$X)</code></pre>
+<p>For example, explicitly choose the new full-universe competitive reference on these same three pathways:</p>
+<pre><code class="language-r">competitive &lt;- passage_analyze_bundle(
+  b, B = 999, seed = 1, reference = "universe"
+)
+competitive$summary
+saveRDS(competitive, "kidney_universe.rds")</code></pre>
+<p>Full-universe reference sets may overlap the target, as required by their conditional gene-label null. It remains necessary to assess whether that null is appropriate for curated pathways. The <a href="{{prefix}}software/#competitive">software guide</a> also shows statistic panels, pathway-local competitive fitting and nuisance controls.</p>
 <details><summary>Add descriptive GpGp fits</summary>
 <pre><code class="language-r">install.packages(c("GpGp", "fields"))
 run_kidney(mode = "gp", B = 199, descriptive_gp = TRUE,

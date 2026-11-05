@@ -1,7 +1,7 @@
 Package: PASSAGE
 Type: Package
 Title: Pathway-Level Spatial Association Testing
-Version: 0.5.0
+Version: 0.6.1
 Authors@R: c(
     person("Diptavo", "Dutta", role = c("aut", "cre"),
            email = "dutta.diptavo@gmail.com")
@@ -15,6 +15,11 @@ Description: Tests whether predefined gene sets show spatially varying
     metrics, and stability-based driver-gene analyses. Includes pathway-only
     component estimation, fixed-kernel subspace tests, and fitted Gaussian
     process covariance comparisons with conditional rotation calibration.
+    Separates statistic construction from matched-set competitive calibration,
+    including shared-background Cauchy, minimum-p and Fisher combinations.
+    Provides pathway-local competitive statistics, conditional full-universe
+    gene-set randomization, negative-control nuisance adjustment and an
+    approximate residual wild-bootstrap option for unequal spot noise.
 License: MIT + file LICENSE
 Encoding: UTF-8
 Depends:

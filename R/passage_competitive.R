@@ -181,7 +181,8 @@ passage_pathway_covariance_metrics <- function(engine,
                                                shrinkage = NULL,
                                                scale_floor_frac = 0.05,
                                                coherence = c("signed", "absolute", "none"),
-                                               ridge = 1e-6) {
+                                               ridge = 1e-6,
+                                               residual_matrix = NULL) {
   covariance <- match.arg(covariance)
   coherence <- match.arg(coherence)
   if (!inherits(engine, "passage_engine")) stop("engine must be a PASSAGE engine")
@@ -189,8 +190,11 @@ passage_pathway_covariance_metrics <- function(engine,
   if (is.null(gene_names)) gene_names <- colnames(Y)
   P <- passage_resolve_pathway(pathway, gene_names)
   if (length(P) == 0L) stop("pathway has no genes present in Y")
+  if (is.null(X)) X <- engine$X
   qrx <- if (!is.null(precomp)) precomp$qr else qr(passage_prepare_design(X, nrow(Y), intercept = TRUE))
-  R_obs <- passage_residualize_with_qr(Y[, P, drop = FALSE], qrx)
+  R_obs <- if (is.null(residual_matrix)) {
+    passage_engine_residuals(engine, Y, precomp = list(qr = qrx), indices = P)
+  } else residual_matrix[, P, drop = FALSE]
   F_hat <- engine$V %*% t(engine$A[P, , drop = FALSE])
   F_res <- passage_residualize_with_qr(F_hat, qrx)
   E_res <- R_obs - F_res
@@ -284,12 +288,14 @@ passage_gene_spatial_stats <- function(engine,
                                        Y,
                                        precomp = NULL,
                                        X = NULL,
-                                       gene_names = NULL) {
+                                       gene_names = NULL,
+                                       residual_matrix = NULL) {
   if (!inherits(engine, "passage_engine")) stop("engine must be a PASSAGE engine")
   Y <- passage_check_y(Y)
   if (is.null(gene_names)) gene_names <- colnames(Y)
+  if (is.null(X)) X <- engine$X
   qrx <- if (!is.null(precomp)) precomp$qr else qr(passage_prepare_design(X, nrow(Y), intercept = TRUE))
-  R_obs <- passage_residualize_with_qr(Y, qrx)
+  R_obs <- if (is.null(residual_matrix)) passage_engine_residuals(engine, Y, precomp = list(qr = qrx)) else residual_matrix
   F_hat <- engine$V %*% t(engine$A)
   F_res <- passage_residualize_with_qr(F_hat, qrx)
   E_res <- R_obs - F_res
@@ -357,7 +363,8 @@ passage_gene_score_z <- function(engine,
                                  Y,
                                  precomp,
                                  gene_names = NULL,
-                                 weight_scheme = c("equal", "var", "range", "invvar")) {
+                                 weight_scheme = c("equal", "var", "range", "invvar"),
+                                 residual_matrix = NULL) {
   weight_scheme <- match.arg(weight_scheme)
   if (!inherits(engine, "passage_engine")) stop("engine must be a PASSAGE engine")
   Y <- passage_check_y(Y)
@@ -365,7 +372,7 @@ passage_gene_score_z <- function(engine,
   if (length(gene_names) != ncol(Y)) stop("gene_names must align with columns of Y")
   if (is.null(precomp) || is.null(precomp$qr)) stop("precomp from passage_h_precompute() is required")
 
-  R <- passage_residualize_with_qr(Y, precomp$qr)
+  R <- if (is.null(residual_matrix)) passage_engine_residuals(engine, Y, precomp = precomp) else residual_matrix
   w <- passage_factor_weights(engine, weight_scheme)
   q_joint <- mean_joint <- var_joint <- rep(0, ncol(Y))
   for (k in seq_len(engine$K)) {
@@ -432,7 +439,7 @@ passage_robust_pathway_score_stat <- function(engine,
     R <- if (!is.null(residual_matrix)) {
       residual_matrix[, P, drop = FALSE]
     } else {
-      passage_residualize_with_qr(Y[, P, drop = FALSE], precomp$qr)
+      passage_engine_residuals(engine, Y, precomp = precomp, indices = P)
     }
     s <- apply(R, 2L, stats::sd)
     keep <- is.finite(s) & s > 1e-10
@@ -549,7 +556,8 @@ passage_gene_pERSA <- function(engine,
                                transform = c("logit", "identity"),
                                standardization = c("robust", "rank", "active"),
                                active_tail = 0.90,
-                               ridge_frac = 0.05) {
+                               ridge_frac = 0.05,
+                               residual_matrix = NULL) {
   reliability <- match.arg(reliability)
   transform <- match.arg(transform)
   standardization <- match.arg(standardization)
@@ -561,7 +569,7 @@ passage_gene_pERSA <- function(engine,
 
   V_res <- passage_residualize_with_qr(engine$V, precomp$qr)
   F_res <- V_res %*% t(engine$A)
-  R_obs <- passage_residualize_with_qr(Y, precomp$qr)
+  R_obs <- if (is.null(residual_matrix)) passage_engine_residuals(engine, Y, precomp = precomp) else residual_matrix
   E_res <- R_obs - F_res
   df <- max(1L, nrow(Y) - precomp$qr$rank)
   center_ss <- function(M) colSums(sweep(M, 2L, colMeans(M), "-")^2) / df
@@ -673,7 +681,7 @@ passage_pERSA_pathway_score_stat <- function(engine,
     R <- if (!is.null(residual_matrix)) {
       residual_matrix[, P, drop = FALSE]
     } else {
-      passage_residualize_with_qr(Y[, P, drop = FALSE], precomp$qr)
+      passage_engine_residuals(engine, Y, precomp = precomp, indices = P)
     }
     s <- apply(R, 2L, stats::sd)
     keep <- is.finite(s) & s > 1e-10
@@ -910,7 +918,7 @@ passage_pathway_factor_hsic_stat <- function(engine,
   if (is.null(gene_names)) gene_names <- colnames(Y)
   P <- passage_resolve_pathway(pathway, gene_names)
   if (length(P) == 0L) stop("pathway has no genes present in Y")
-  R <- if (!is.null(residual_matrix)) residual_matrix[, P, drop = FALSE] else passage_residualize_with_qr(Y[, P, drop = FALSE], precomp$qr)
+  R <- if (!is.null(residual_matrix)) residual_matrix[, P, drop = FALSE] else passage_engine_residuals(engine, Y, precomp = precomp, indices = P)
   if (is.null(spatial_features)) {
     spatial_features <- passage_residualize_with_qr(engine$V, precomp$qr)
   }
@@ -944,7 +952,7 @@ passage_pathway_activity_hotspot_stat <- function(engine,
   if (is.null(gene_names)) gene_names <- colnames(Y)
   P <- passage_resolve_pathway(pathway, gene_names)
   if (length(P) == 0L) stop("pathway has no genes present in Y")
-  R <- if (!is.null(residual_matrix)) residual_matrix[, P, drop = FALSE] else passage_residualize_with_qr(Y[, P, drop = FALSE], precomp$qr)
+  R <- if (!is.null(residual_matrix)) residual_matrix[, P, drop = FALSE] else passage_engine_residuals(engine, Y, precomp = precomp, indices = P)
   s <- apply(R, 2L, stats::sd)
   keep <- is.finite(s) & s > 1e-10
   if (sum(keep) == 0L) return(if (output == "statistic") NA_real_ else list(statistic = NA_real_))
@@ -1317,132 +1325,19 @@ passage_conditional_competitive_test <- function(engine,
   Y <- passage_check_y(Y)
   if (is.null(gene_names)) gene_names <- colnames(Y)
   if (is.null(gene_bins)) gene_bins <- passage_make_gene_bins(Y, gene_names = gene_names)
-  if (statistic %in% c("score_sparse_topk_z", "score_lse_z", "score_factor_hsic", "score_coherence", "score_activity_hotspot", "score_pERSA_z", "score_pERSA_rank_z", "score_ePSA_rank_z", "score_pERSA_active_z", "score_robust_z", "score_z", "score_Q")) {
-    if (is.null(precomp)) {
-      precomp <- passage_h_precompute(engine, X = X)
-    }
-    residual_matrix <- passage_residualize_with_qr(Y, precomp$qr)
-    if (statistic == "score_sparse_topk_z") {
-      gene_scores <- passage_gene_score_z(
-        engine, Y, precomp = precomp, gene_names = gene_names,
-        weight_scheme = score_weight_scheme
-      )
-      score_fun <- function(idx) {
-        passage_sparse_topk_pathway_score_stat(
-          engine, Y, idx, precomp = precomp, gene_names = gene_names,
-          gene_scores = gene_scores, residual_matrix = residual_matrix,
-          weight_scheme = score_weight_scheme
-        )
-      }
-    } else if (statistic == "score_lse_z") {
-      gene_scores <- passage_gene_score_z(
-        engine, Y, precomp = precomp, gene_names = gene_names,
-        weight_scheme = score_weight_scheme
-      )
-      lse <- passage_gene_lse(gene_scores$score_z_gene, gene_bins = gene_bins)
-      score_fun <- function(idx) {
-        passage_gene_activity_pathway_score_stat(
-          lse$lse_z, idx, Y, precomp = precomp, gene_names = gene_names,
-          residual_matrix = residual_matrix
-        )
-      }
-    } else if (statistic == "score_factor_hsic") {
-      spatial_features <- passage_residualize_with_qr(engine$V, precomp$qr)
-      score_fun <- function(idx) {
-        passage_pathway_factor_hsic_stat(
-          engine, Y, idx, precomp = precomp, gene_names = gene_names,
-          residual_matrix = residual_matrix, spatial_features = spatial_features
-        )
-      }
-    } else if (statistic == "score_coherence") {
-      fast_ctx <- passage_competitive_fast_context(engine, Y, precomp = precomp, gene_names = gene_names)
-      score_fun <- function(idx) passage_fast_pc1_spatial_fraction(idx, fast_ctx)
-    } else if (statistic == "score_activity_hotspot") {
-      score_fun <- function(idx) {
-        passage_pathway_activity_hotspot_stat(
-          engine, Y, idx, precomp = precomp, gene_names = gene_names,
-          residual_matrix = residual_matrix, weight_scheme = score_weight_scheme
-        )
-      }
-    } else if (statistic %in% c("score_pERSA_z", "score_pERSA_rank_z", "score_ePSA_rank_z", "score_pERSA_active_z")) {
-      persa_reliability <- if (statistic == "score_ePSA_rank_z") "none" else "snr"
-      persa_standardization <- switch(
-        statistic,
-        score_pERSA_z = "robust",
-        score_pERSA_active_z = "active",
-        "rank"
-      )
-      gene_activity <- passage_gene_pERSA(
-        engine, Y, precomp = precomp, gene_names = gene_names,
-        gene_bins = gene_bins,
-        reliability = persa_reliability,
-        standardization = persa_standardization
-      )
-      residual_matrix <- passage_residualize_with_qr(Y, precomp$qr)
-      score_fun <- function(idx) {
-        passage_pERSA_pathway_score_stat(
-          engine, Y, idx, precomp = precomp, gene_names = gene_names,
-          gene_activity = gene_activity, gene_bins = gene_bins,
-          residual_matrix = residual_matrix
-        )
-      }
-    } else if (statistic == "score_robust_z") {
-      gene_scores <- passage_gene_score_z(
-        engine, Y, precomp = precomp, gene_names = gene_names,
-        weight_scheme = score_weight_scheme
-      )
-      score_fun <- function(idx) {
-      passage_robust_pathway_score_stat(
-          engine, Y, idx, precomp = precomp, gene_names = gene_names,
-          weight_scheme = score_weight_scheme, gene_scores = gene_scores
-        )
-      }
-    } else {
-      score_output <- if (statistic == "score_z") "z" else "Q"
-      score_fun <- function(idx) {
-        passage_pathway_score_stat(
-          engine, Y, idx, precomp = precomp, gene_names = gene_names,
-          weight_scheme = score_weight_scheme, output = score_output
-        )
-      }
-    }
-    obs <- score_fun(passage_resolve_pathway(pathway, gene_names))
-    perm <- passage_competitive_permutation_test(pathway, score_fun, gene_bins, gene_names,
-                                                 B = B, seed = seed, observed = obs,
-                                                 sampler = sampler, module_col = module_col,
-                                                 mcmc_burnin = mcmc_burnin, mcmc_thin = mcmc_thin,
-                                                 importance_oversample = importance_oversample,
-                                                 importance_temperature = importance_temperature,
-                                                 balance_fun = balance_fun,
-                                                 balance_target = balance_target,
-                                                 balance_tol = balance_tol,
-                                                 balance_max_tries = balance_max_tries)
-    return(list(statistic = statistic, analytic = NULL, permutation = perm))
-  }
+  statistic_fun <- passage_make_statistic(
+    engine, Y, statistics = statistic, precomp = precomp, X = X,
+    gene_bins = gene_bins, score_weight_scheme = score_weight_scheme,
+    covariance = covariance, coherence = coherence, gene_names = gene_names
+  )
+  score_fun <- function(idx) unname(statistic_fun(idx)[[1L]])
+  analytic <- NULL
   if (statistic == "mean_propSV_conditional") {
     gs <- passage_gene_spatial_stats(engine, Y, precomp = precomp, X = X, gene_names = gene_names)
-    z <- passage_competitive_gene_stat_z(pathway, gs$propSV, gene_bins, gene_names)
-    score_fun <- function(idx) mean(gs$propSV[idx], na.rm = TRUE)
-    perm <- passage_competitive_permutation_test(pathway, score_fun, gene_bins, gene_names,
-                                                 B = B, seed = seed, observed = z$statistic,
-                                                 sampler = sampler, module_col = module_col,
-                                                 mcmc_burnin = mcmc_burnin, mcmc_thin = mcmc_thin,
-                                                 importance_oversample = importance_oversample,
-                                                 importance_temperature = importance_temperature,
-                                                 balance_fun = balance_fun,
-                                                 balance_target = balance_target,
-                                                 balance_tol = balance_tol,
-                                                 balance_max_tries = balance_max_tries)
-    return(list(statistic = statistic, analytic = z, permutation = perm))
+    analytic <- passage_competitive_gene_stat_z(pathway, gs$propSV, gene_bins, gene_names)
   }
-  metric_fun <- function(idx) {
-    passage_pathway_covariance_metrics(
-      engine, Y, idx, precomp = precomp, X = X, gene_names = gene_names,
-      covariance = covariance, coherence = coherence
-    )$summary[[statistic]]
-  }
-  obs <- metric_fun(passage_resolve_pathway(pathway, gene_names))
-  perm <- passage_competitive_permutation_test(pathway, metric_fun, gene_bins, gene_names,
+  obs <- score_fun(passage_resolve_pathway(pathway, gene_names))
+  perm <- passage_competitive_permutation_test(pathway, score_fun, gene_bins, gene_names,
                                                B = B, seed = seed, observed = obs,
                                                sampler = sampler, module_col = module_col,
                                                mcmc_burnin = mcmc_burnin, mcmc_thin = mcmc_thin,
@@ -1452,7 +1347,7 @@ passage_conditional_competitive_test <- function(engine,
                                                balance_target = balance_target,
                                                balance_tol = balance_tol,
                                                balance_max_tries = balance_max_tries)
-  list(statistic = statistic, analytic = NULL, permutation = perm)
+  list(statistic = statistic, analytic = analytic, permutation = perm)
 }
 
 passage_pathway_coherence_test <- function(engine,
@@ -1513,7 +1408,7 @@ passage_region_enrichment_test <- function(engine,
   if (nlevels(region) != 2L) stop("region must have exactly two levels")
   if (is.null(precomp) || is.null(precomp$qr)) stop("precomp from passage_h_precompute() is required")
 
-  R_P <- passage_residualize_with_qr(Y[, P, drop = FALSE], precomp$qr)
+  R_P <- passage_engine_residuals(engine, Y, precomp = precomp, indices = P)
   A_P <- engine$A[P, , drop = FALSE]
   w <- passage_factor_weights(engine, weight_scheme)
   q_region <- function(region_factor) {
@@ -1566,8 +1461,9 @@ passage_competitive_fast_context <- function(engine,
   if (!inherits(engine, "passage_engine")) stop("engine must be a PASSAGE engine")
   Y <- passage_check_y(Y)
   if (is.null(gene_names)) gene_names <- colnames(Y)
+  if (is.null(X)) X <- engine$X
   qrx <- if (!is.null(precomp)) precomp$qr else qr(passage_prepare_design(X, nrow(Y), intercept = TRUE))
-  R_obs <- passage_residualize_with_qr(Y, qrx)
+  R_obs <- passage_engine_residuals(engine, Y, precomp = list(qr = qrx))
   V_res <- passage_residualize_with_qr(engine$V, qrx)
   F_res <- V_res %*% t(engine$A)
   E_res <- R_obs - F_res

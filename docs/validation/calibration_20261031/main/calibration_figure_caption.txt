@@ -1,0 +1,4 @@
+Points: empirical null rejection rates at nominal 5%; bars: pointwise exact 95% binomial intervals.
+Dashed line: 5%. Competitive panels use uniform target membership; complementary references exclude unsupported matching cases, so denominators differ.
+See paired_reference_comparison.csv for same-replicate comparisons. Self-contained panels use 500 datasets per scenario and a correctly specified mean design.
+399 reference draws per dataset. This figure does not establish validity for curated correlated-module labels or spatially dependent spot errors.

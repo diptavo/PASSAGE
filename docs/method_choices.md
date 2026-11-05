@@ -52,15 +52,18 @@ for every retained component.
 
 The implementation profiles out $\sigma_k^2$ and maximizes the profile
 restricted log likelihood over prespecified range and fraction grids. The
-pathway statistic sums twice the component improvements over their nonspatial
-models. The fitted ranges and fractions therefore contribute directly to
+default pathway statistic sums twice the component improvements over their
+nonspatial models. `aggregation = "max"` keeps the largest improvement;
+`"topk"` sums a prespecified number of the largest improvements. The fitted
+ranges and fractions therefore contribute directly to
 testing. For correlated FA scores, this sum is a composite statistic, not a
 joint independent-factor likelihood ratio.
 
 Calibration uses joint Gaussian rotations of the scores in the residual space.
 Each draw preserves the complete score Gram matrix and repeats the same
-range/fraction search. A chi-square reference is not used. The Monte Carlo
-p-value is $(1 + \#\{T_b\geq T_{obs}\})/(B+1)$.
+range/fraction search and component aggregation. A chi-square reference is not
+used. The Monte Carlo p-value is one plus the number of null statistics at
+least as large as the observed statistic, divided by `B + 1`.
 
 Under the fixed-design Gaussian null, pathway PCA and the implemented FA
 estimator depend on the gene Gram matrix and transform with row rotations.
@@ -114,7 +117,7 @@ implemented by these pathway APIs.
 
 ## Competitive analysis
 
-`passage_analyze_bundle()` fits a global PCA factor engine across the supplied
+By default, `passage_analyze_bundle()` fits a global PCA factor engine across the supplied
 gene universe and uses its loadings, residual variances and spatial kernels to
 score each pathway. It compares the observed `score_z` with scores of matched
 gene sets. The p-value is an empirical upper-tail probability, not a
@@ -122,19 +125,56 @@ standard-normal tail despite the statistic's name.
 
 Default matching uses expression, detection and variance bins. An optional
 module column adds module matching. Each draw preserves stratum counts, contains
-no duplicate genes and excludes the tested genes. Inadequate background support
+no duplicate genes. The default `reference = "complement"` excludes the tested
+genes; `reference = "universe"` includes the full eligible universe and allows
+target overlap. Inadequate background support
 causes an error rather than a fallback to unmatched genes. Sets may recur
 across separate Monte Carlo draws.
 
-This procedure relies on exchangeability within the chosen matching strata;
-matching a few gene summaries does not establish that assumption for every
-dataset. The API returns BH and BY adjustments across the eligible pathways in
-one call. Multiple samples may require a larger prespecified testing family.
+Full-universe randomization conditions on expression, design, matching strata
+and a target-independent shared fit, and assumes uniform target membership
+among sets with the declared stratum counts. Identical scoring then gives an
+exchangeable gene-label reference. This does not establish uniform membership
+for a fixed curated, co-regulated pathway, and the complement comparison does
+not automatically inherit this finite-universe argument. The API returns BH
+and BY adjustments across pathways within each named test. Multiple samples
+or selection across statistics/combiners may require a larger testing family.
 Driver rankings are exploratory and need stability and independent validation.
 
-This global procedure is not a competitive version of the pathway GP test.
-A pathway-local competitive GP analysis would need to repeat pathway estimation
-and GP fitting for each matched set and is not currently implemented.
+The statistic and competitive calibration are now separate interfaces.
+`passage_make_statistic()` supplies 18 global statistics, while
+`passage_make_local_gp_statistic()` repeats pathway PCA/FA and GP fitting for
+every matched set, sharing only coordinate/design kernel calculations.
+`passage_competitive_test()` accepts either factory or a custom deterministic
+function of gene indices. The bundle API selects local fitting with
+`estimation = "pathway"`. These local options remain research-stage.
+
+Cauchy, minimum-p and Fisher combinations use symmetric pooled component ranks
+followed by empirical calibration on shared reference sets. They do not use
+independent-p Fisher or analytic ACAT reference distributions. Prespecify the
+statistic panel and primary combiner. See the
+[competitive interface guide](competitive_interface.md) for definitions.
+
+## Wild-refit calibration and nuisance adjustment
+
+`passage_test_pathway_gp_wild()` keeps the observed pathway GP statistic and
+changes its null reference. It applies one Rademacher multiplier per spot to
+the entire HC2-adjusted residual gene vector, retaining unequal residual
+magnitudes at their original locations. Every draw repeats adjustment,
+PCA/FA, rank selection, GP grid search and component aggregation.
+
+This is an approximate residual wild bootstrap with independent spot-error
+vectors and a suitable mean model, not an exact finite-sample test. It does not
+solve residual spatial dependence, unknown mean effects or arbitrary count
+distributions. It does not fit a heteroskedastic GP variance surface, so fitted
+spatial parameters remain descriptive and potentially misspecified.
+
+`passage_prepare_nuisance()` can add prespecified negative-control PCs to
+measured covariates, report leverage and residual degrees of freedom, and
+return an analysis universe excluding controls. Valid controls must share
+nuisance variation without the target biology. Their estimated uncertainty is
+not propagated by treating them as fixed covariates. See the
+[calibration guide](robust_calibration.md) for assumptions and examples.
 
 ## Descriptive fits and downstream analysis
 
@@ -154,7 +194,7 @@ or supply genetic evidence by itself.
 
 ## Validation and current limits
 
-The pathway references assume independent Gaussian row errors with a common
+The Gaussian rotation and fixed-kernel references assume independent Gaussian row errors with a common
 gene covariance, conditional on a fixed adjustment design. Arbitrary
 correlation between genes is allowed. Normalized counts need not meet this
 model. Library-size or composition covariates estimated from the same expression
@@ -182,8 +222,14 @@ about a 20-fold variance gradient without cross-spot correlation and violates
 the common-variance null. The resulting inflation is a material robustness
 failure. The fixed-kernel tests also inflated under that stress.
 
-A variance-aware null and its calibration remain development work. Current
-p-values should not be treated as broadly calibrated for heterogeneous spatial
-transcriptomics data. Choose the estimator, kernel settings and testing family
-in advance; assess calibration and approximation sensitivity; then interpret
-replicated results with the covariate adjustment made explicit.
+The subsequent 0.6.1 experiment evaluated full-universe competitive references
+and wild-refit self-contained calibration on 6,800 datasets, plus a separately
+labeled 600-dataset weak-signal follow-up. Unequal-noise null rejection was
+14.4% with Gaussian rotations versus 4.2% with wild refitting; unequal noise
+plus nuisance gave 12.4% versus 6.2% (wild 95% interval 4.3–8.7%).
+The [complete report](validation/calibration_20261031/findings.md) retains
+uncertainty and remaining adjusted competitive calibration flags. These
+findings support explicit options under the studied assumptions, rather than
+universal calibration. Choose estimator, reference, kernel settings and testing
+family in advance; assess calibration and approximation sensitivity; then
+interpret replicated results with the covariate adjustment made explicit.

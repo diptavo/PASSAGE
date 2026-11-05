@@ -1,0 +1,4 @@
+Checkpoints: 1200
+Result rows: 8400
+Complete: TRUE
+Checks: unique expected scenario/replicate/method keys; common source and script hashes; independently reconstructed pooled component ranks and combination scores; exact tail arithmetic; matching composition, exclusions and uniqueness; fail-closed outputs.

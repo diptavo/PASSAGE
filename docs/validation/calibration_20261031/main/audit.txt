@@ -1,0 +1,9 @@
+Datasets: 6800
+Planned: 6800
+Complete: TRUE
+Computational failures: 0
+Warnings: 0
+CPU elapsed sum (seconds): 23995.9
+Checks: unique keys; complete scenario counts; common source/script hashes; finite bounded plus-one p-values; matching exclusions retained.
+Intervals: pointwise exact 95% binomial intervals, not adjusted across scenarios/statistics.
+Scenario RNG seeds are independent; method/reference comparisons are paired within each dataset.

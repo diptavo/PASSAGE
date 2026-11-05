@@ -8,6 +8,7 @@ passage_h_precompute <- function(engine,
     stop("engine must be from passage_fit_engine_pca()")
   }
   score_kernel <- match.arg(score_kernel)
+  if (is.null(X)) X <- engine$X
   X <- passage_prepare_design(X, engine$N, intercept = TRUE)
   moments <- vector("list", engine$K)
   for (k in seq_len(engine$K)) {
@@ -50,10 +51,9 @@ passage_score_test <- function(engine,
   if (length(P) < 1L) {
     stop("pathway has no genes present in Y")
   }
-  YP <- Y[, P, drop = FALSE]
   A_P <- engine$A[P, , drop = FALSE]
   D_P <- engine$D[P]
-  R_P <- passage_residualize_with_qr(YP, precomp$qr)
+  R_P <- passage_engine_residuals(engine, Y, precomp = precomp, indices = P)
   out <- passage_score_from_residuals(
     engine = engine,
     R_P = R_P,

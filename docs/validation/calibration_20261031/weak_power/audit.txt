@@ -1,0 +1,5 @@
+Exploratory weak-signal follow-up: 600 datasets; same methods and 399 draws; new independent seeds.
+Motivation: the primary self-contained delta=0.45 alternatives had 100% detection; this follow-up uses delta=0.15.
+No method or calibration tuning occurred. Compare detection alongside the primary null rates; Gaussian rotations are inflated under unequal variance.
+Warnings: 0
+AUDIT_PASS

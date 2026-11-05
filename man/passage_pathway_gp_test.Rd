@@ -1,6 +1,7 @@
 \name{passage_test_pathway_gp}
 \alias{passage_test_pathway_gp}
 \alias{passage_prepare_gp_kernel}
+\alias{passage_pathway_gp_statistic}
 \title{Adaptive Spatial GP Model Comparison for Pathway Components}
 \description{Fit spatial covariance parameters to unsmoothed pathway components and test the improvement over nonspatial models. A joint Gaussian rotation reference repeats the parameter search for every null draw. Coordinate-only kernel caches can be reused across pathways with the same locations and adjustment design.}
 \usage{
@@ -13,7 +14,11 @@ passage_test_pathway_gp(fit, coords = NULL, kernel_cache = NULL,
   fractions = c(0, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.97),
   B = 999L, seed = 1L, kernel_method = c("lowrank", "dense"),
   n_features = 64L, max_dense_n = 1000L, batch_size = 64L,
-  keep_null = TRUE)
+  keep_null = TRUE, aggregation = c("sum", "max", "topk"), top_k = 2L)
+passage_pathway_gp_statistic(fit, kernel_cache,
+  fractions = c(0, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.97),
+  aggregation = c("sum", "max", "topk"), top_k = 2L,
+  output = c("statistic", "details"))
 }
 \arguments{
 \item{coords}{Finite aligned spatial coordinates. Coordinate units are retained. For unit-domain ranges, translate the coordinates and divide all axes by the same maximum axis span. Supplied spot IDs must match the fitted scores exactly.}
@@ -29,11 +34,16 @@ passage_test_pathway_gp(fit, coords = NULL, kernel_cache = NULL,
 \item{seed}{Random seed; the prior RNG state is restored.}
 \item{batch_size}{Number of null draws processed per batch. Smaller batches reduce working memory.}
 \item{keep_null}{Whether to retain the scalar pathway null statistics in the result.}
+\item{aggregation}{Sum all component profile improvements, take their maximum, or sum the top_k strongest. The same component selection is repeated in every null rotation.}
+\item{top_k}{Prespecified positive number of components for topk, capped at the fitted rank.}
+\item{output}{Return a numeric statistic or detailed component fits.}
 }
 \value{
 \code{passage_prepare_gp_kernel()} returns a coordinate/design-specific cache with projected kernel spectra and settings.
 
-\code{passage_test_pathway_gp()} returns the scalar sum of twice the profile restricted-loglikelihood improvements in \code{statistic}, a Monte Carlo \code{p}, and \code{component_fits}. Each component row reports its statistic, fitted grid range and fraction, total/spatial/noise variance estimates, and grid-boundary flags. The result also contains method/calibration labels, optional null statistics, Monte Carlo count and seed, residual degrees of freedom, retained rank, configuration and timing.
+\code{passage_test_pathway_gp()} returns the selected aggregation of twice the profile restricted-loglikelihood improvements in \code{statistic}, a Monte Carlo \code{p}, and \code{component_fits}. Each component row reports its statistic, fitted grid range and fraction, total/spatial/noise variance estimates, selection indicator and grid-boundary flags. The result also contains method/calibration labels, optional null statistics, Monte Carlo count and seed, residual degrees of freedom, retained rank, configuration and timing.
+
+\code{passage_pathway_gp_statistic()} computes only the observed statistic or details, without null draws or p-values. It can be used inside a generic competitive callback that refits every target/background pathway.
 }
 \details{
 After adjustment, each component is modeled with covariance proportional to
