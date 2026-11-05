@@ -23,6 +23,7 @@ tmp/
 *.rds
 *.RDS
 !inst/extdata/kidney_KC2.rds
+!analysis/cancer_data/*/*.rds
 *.RData
 *.h5
 *.h5ad

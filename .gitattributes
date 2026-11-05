@@ -1,0 +1,2 @@
+# Keep full datasets available in the repository without enlarging source archives.
+analysis/cancer_data/*/*.rds binary export-ignore

@@ -13,6 +13,7 @@ Current version: **0.6.1**.
 - [Methods](https://diptavo.github.io/PASSAGE/methods/): scientific questions, inference options, intuition and interpretation.
 - [Software guide](https://diptavo.github.io/PASSAGE/software/): installation, input format, R functions and command-line usage.
 - [Example analysis](https://diptavo.github.io/PASSAGE/example/): analyze three pathways in the prepared kidney sample, including competitive testing.
+- [Full prepared cancer datasets](analysis/cancer_data/): 13 complete samples across five tissue groups, all 50 Hallmark pathways, provenance, and download and analysis commands.
 - [Interchangeable competitive statistics](docs/competitive_interface.md): global or pathway-local estimation, custom statistics, calibrated combinations, matching diagnostics, and interactive R examples.
 - [Release notes](NEWS.md)
 

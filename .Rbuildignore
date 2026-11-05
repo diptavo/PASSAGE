@@ -1,6 +1,7 @@
 ^PASSAGE[.]Rcheck$
 ^[.]github$
 ^[.]gitignore$
+^[.]gitattributes$
 ^CITATION[.]cff$
 ^analysis$
 ^docs$
